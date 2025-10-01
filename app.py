@@ -90,13 +90,6 @@ def migrate_database():
                     db.session.commit()
                     print("Migration completed: Added status column")
 
-                # Add is_banned column if it doesn't exist
-                if 'is_banned' not in existing_columns:
-                    print("Adding is_banned column to player table...")
-                    db.session.execute(text("ALTER TABLE player ADD COLUMN is_banned BOOLEAN DEFAULT 0 NOT NULL"))
-                    db.session.commit()
-                    print("Migration completed: Added is_banned column")
-
             # If registration_link table exists, check for new columns
             if 'registration_link' in existing_tables:
                 existing_columns = [col['name'] for col in inspector.get_columns('registration_link')]
@@ -113,6 +106,14 @@ def migrate_database():
                 print("Creating player_masterlist table...")
                 db.create_all()
                 print("Migration completed: Created player_masterlist table")
+            else:
+                # Add is_banned column to player_masterlist if it doesn't exist
+                existing_columns = [col['name'] for col in inspector.get_columns('player_masterlist')]
+                if 'is_banned' not in existing_columns:
+                    print("Adding is_banned column to player_masterlist table...")
+                    db.session.execute(text("ALTER TABLE player_masterlist ADD COLUMN is_banned BOOLEAN DEFAULT 0 NOT NULL"))
+                    db.session.commit()
+                    print("Migration completed: Added is_banned column to player_masterlist")
 
             if 'bracket' not in existing_tables or 'match' not in existing_tables or 'team' not in existing_tables or 'team_players' not in existing_tables:
                 print("Creating bracket, match, team and team_players tables...")
@@ -151,6 +152,7 @@ class PlayerMasterlist(db.Model):
     real_mmr = db.Column(db.Integer, nullable=False)
     steam_id = db.Column(db.String(50), nullable=True)  # Optional Steam ID
     notes = db.Column(db.Text, nullable=True)
+    is_banned = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -163,7 +165,6 @@ class Player(db.Model):
     masterlist_player_id = db.Column(db.Integer, db.ForeignKey('player_masterlist.id'), nullable=True)  # Link to masterlist
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='Present', nullable=False)
-    is_banned = db.Column(db.Boolean, default=False, nullable=False)
 
     registration_link = db.relationship('RegistrationLink', backref=db.backref('players', lazy=True))
     masterlist_player = db.relationship('PlayerMasterlist', backref=db.backref('registrations', lazy=True))
@@ -338,7 +339,20 @@ def api_shuffle_teams(link_code):
         app.logger.warning(f'Shuffle attempted with invalid link: {link_code}')
         return jsonify({'error': 'Invalid link'}), 400
 
-    players = Player.query.filter_by(registration_link_id=reg_link.id, status='Present', is_banned=False).all()
+    # Get all present players, then filter out banned ones from masterlist
+    all_players = Player.query.filter_by(registration_link_id=reg_link.id, status='Present').all()
+
+    # Filter out players who are banned in the masterlist
+    players = []
+    for player in all_players:
+        if player.masterlist_player_id:
+            masterlist_player = PlayerMasterlist.query.get(player.masterlist_player_id)
+            if masterlist_player and not masterlist_player.is_banned:
+                players.append(player)
+        else:
+            # If player is not in masterlist, include them
+            players.append(player)
+
     if len(players) < 10:
         app.logger.warning(f'Shuffle attempted with insufficient players ({len(players)}) for event: {reg_link.title}')
         return jsonify({'error': 'Not enough present players to shuffle. At least 10 players are required.'}), 400
@@ -551,14 +565,15 @@ def admin_toggle_player_status(player_id):
 
     return jsonify({'message': 'Player status updated', 'new_status': player.status})
 
-@app.route('/admin/event/player/<int:player_id>/toggle_ban', methods=['POST'])
-def admin_toggle_player_ban(player_id):
+@app.route('/admin/masterlist/<int:player_id>/toggle_ban', methods=['POST'])
+def admin_toggle_masterlist_ban(player_id):
     if 'admin_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
 
-    player = Player.query.get_or_404(player_id)
+    player = PlayerMasterlist.query.get_or_404(player_id)
 
     player.is_banned = not player.is_banned
+    player.updated_at = datetime.utcnow()
     db.session.commit()
 
     status = 'banned' if player.is_banned else 'unbanned'

@@ -45,7 +45,7 @@
                         </thead>
                         <tbody>
                             {% for player in players %}
-                            <tr>
+                            <tr id="masterlist-row-{{ player.id }}" class="{{ 'player-banned' if player.is_banned else '' }}">
                                 <td>
                                     <strong>{{ player.player_name }}</strong>
                                 </td>
@@ -68,11 +68,16 @@
                                 </td>
                                 <td>{{ player.created_at.strftime('%Y-%m-%d') }}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-outline-primary" 
+                                    <button class="btn btn-sm btn-toggle-ban-masterlist {{ 'btn-danger' if player.is_banned else 'btn-success' }}"
+                                            data-player-id="{{ player.id }}"
+                                            title="{{ 'Unban Player' if player.is_banned else 'Ban Player' }}">
+                                        <i class="fas {{ 'fa-ban' if player.is_banned else 'fa-user-check' }}"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-primary"
                                             onclick="editPlayer({{ player.id }}, '{{ player.player_name }}', {{ player.real_mmr }}, '{{ player.steam_id or '' }}', '{{ player.notes or '' }}')">
                                         <i class="fas fa-edit"></i> Edit
                                     </button>
-                                    <button class="btn btn-sm btn-outline-danger" 
+                                    <button class="btn btn-sm btn-outline-danger"
                                             onclick="deletePlayer({{ player.id }}, '{{ player.player_name }}')">
                                         <i class="fas fa-trash"></i> Delete
                                     </button>
@@ -223,9 +228,46 @@ function editPlayer(id, name, mmr, steamId, notes) {
 function deletePlayer(id, name) {
     document.getElementById('deletePlayerName').textContent = name;
     document.getElementById('deletePlayerForm').action = `/admin/masterlist/delete/${id}`;
-    
+
     const modal = new bootstrap.Modal(document.getElementById('deletePlayerModal'));
     modal.show();
 }
+
+// Toggle Ban
+document.querySelectorAll('.btn-toggle-ban-masterlist').forEach(button => {
+    button.addEventListener('click', function() {
+        const playerId = this.dataset.playerId;
+        fetch(`/admin/masterlist/${playerId}/toggle_ban`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showToast('Error: ' + data.error, 'error');
+            } else {
+                const playerRow = document.getElementById(`masterlist-row-${playerId}`);
+                const banIcon = this.querySelector('i');
+
+                if (data.is_banned) {
+                    playerRow.classList.add('player-banned');
+                    this.classList.remove('btn-success');
+                    this.classList.add('btn-danger');
+                    banIcon.classList.remove('fa-user-check');
+                    banIcon.classList.add('fa-ban');
+                    this.setAttribute('title', 'Unban Player');
+                    showToast('Player banned successfully', 'warning');
+                } else {
+                    playerRow.classList.remove('player-banned');
+                    this.classList.remove('btn-danger');
+                    this.classList.add('btn-success');
+                    banIcon.classList.remove('fa-ban');
+                    banIcon.classList.add('fa-user-check');
+                    this.setAttribute('title', 'Ban Player');
+                    showToast('Player unbanned successfully', 'success');
+                }
+            }
+        });
+    });
+});
 </script>
 {% endblock %}

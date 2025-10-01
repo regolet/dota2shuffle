@@ -55,7 +55,7 @@
                         </thead>
                         <tbody>
                             {% for player in players %}
-                            <tr id="player-row-{{ player.id }}" class="{{ 'player-absent' if player.status == 'Absent' else '' }} {{ 'player-banned' if player.is_banned else '' }}">
+                            <tr id="player-row-{{ player.id }}" class="{{ 'player-absent' if player.status == 'Absent' else '' }}">
                                 <td>
                                     <button class="btn btn-sm btn-toggle-status" data-player-id="{{ player.id }}">
                                         {% if player.status == 'Present' %}
@@ -68,13 +68,6 @@
                                 <td>{{ player.player_name }}</td>
                                 <td>{{ player.mmr }}</td>
                                 <td>
-                                    <button class="icon-button btn-toggle-ban" data-player-id="{{ player.id }}" title="{{ 'Unban Player' if player.is_banned else 'Ban Player' }}">
-                                        {% if player.is_banned %}
-                                            <i class="fas fa-ban text-danger"></i>
-                                        {% else %}
-                                            <i class="fas fa-user-check text-success"></i>
-                                        {% endif %}
-                                    </button>
                                     <button class="icon-button btn-edit-player" data-player-id="{{ player.id }}" data-player-name="{{ player.player_name }}" data-player-mmr="{{ player.mmr }}">
                                         <i class="fas fa-edit text-primary"></i>
                                     </button>
@@ -448,38 +441,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Toggle Ban
-    document.querySelectorAll('.btn-toggle-ban').forEach(button => {
-        button.addEventListener('click', function() {
-            const playerId = this.dataset.playerId;
-            fetch(`/admin/event/player/${playerId}/toggle_ban`, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    showToast('Error: ' + data.error, 'error');
-                } else {
-                    const playerRow = document.getElementById(`player-row-${playerId}`);
-                    const banIcon = this.querySelector('i');
-
-                    if (data.is_banned) {
-                        playerRow.classList.add('player-banned');
-                        banIcon.classList.remove('fa-user-check', 'text-success');
-                        banIcon.classList.add('fa-ban', 'text-danger');
-                        this.setAttribute('title', 'Unban Player');
-                        showToast('Player banned successfully', 'warning');
-                    } else {
-                        playerRow.classList.remove('player-banned');
-                        banIcon.classList.remove('fa-ban', 'text-danger');
-                        banIcon.classList.add('fa-user-check', 'text-success');
-                        this.setAttribute('title', 'Ban Player');
-                        showToast('Player unbanned successfully', 'success');
-                    }
-                }
-            });
-        });
-    });
 });
 </script>
 {% endblock %}
