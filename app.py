@@ -90,6 +90,13 @@ def migrate_database():
                     db.session.commit()
                     print("Migration completed: Added status column")
 
+                # Add is_banned column if it doesn't exist
+                if 'is_banned' not in existing_columns:
+                    print("Adding is_banned column to player table...")
+                    db.session.execute(text("ALTER TABLE player ADD COLUMN is_banned BOOLEAN DEFAULT 0 NOT NULL"))
+                    db.session.commit()
+                    print("Migration completed: Added is_banned column")
+
             # If registration_link table exists, check for new columns
             if 'registration_link' in existing_tables:
                 existing_columns = [col['name'] for col in inspector.get_columns('registration_link')]
@@ -156,7 +163,8 @@ class Player(db.Model):
     masterlist_player_id = db.Column(db.Integer, db.ForeignKey('player_masterlist.id'), nullable=True)  # Link to masterlist
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='Present', nullable=False)
-    
+    is_banned = db.Column(db.Boolean, default=False, nullable=False)
+
     registration_link = db.relationship('RegistrationLink', backref=db.backref('players', lazy=True))
     masterlist_player = db.relationship('PlayerMasterlist', backref=db.backref('registrations', lazy=True))
 
@@ -330,7 +338,7 @@ def api_shuffle_teams(link_code):
         app.logger.warning(f'Shuffle attempted with invalid link: {link_code}')
         return jsonify({'error': 'Invalid link'}), 400
 
-    players = Player.query.filter_by(registration_link_id=reg_link.id, status='Present').all()
+    players = Player.query.filter_by(registration_link_id=reg_link.id, status='Present', is_banned=False).all()
     if len(players) < 10:
         app.logger.warning(f'Shuffle attempted with insufficient players ({len(players)}) for event: {reg_link.title}')
         return jsonify({'error': 'Not enough present players to shuffle. At least 10 players are required.'}), 400
@@ -533,15 +541,30 @@ def admin_toggle_player_status(player_id):
         return jsonify({'error': 'Unauthorized'}), 401
 
     player = Player.query.get_or_404(player_id)
-    
+
     if player.status == 'Present':
         player.status = 'Absent'
     else:
         player.status = 'Present'
-        
+
     db.session.commit()
-    
+
     return jsonify({'message': 'Player status updated', 'new_status': player.status})
+
+@app.route('/admin/event/player/<int:player_id>/toggle_ban', methods=['POST'])
+def admin_toggle_player_ban(player_id):
+    if 'admin_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    player = Player.query.get_or_404(player_id)
+
+    player.is_banned = not player.is_banned
+    db.session.commit()
+
+    status = 'banned' if player.is_banned else 'unbanned'
+    app.logger.info(f'Player {player.player_name} (ID: {player_id}) {status} by admin {session["admin_username"]}')
+
+    return jsonify({'message': f'Player {status}', 'is_banned': player.is_banned})
 
 @app.route('/admin/create_link', methods=['POST'])
 def admin_create_link():

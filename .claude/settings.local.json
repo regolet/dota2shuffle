@@ -1,12 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(rm:*)",
-      "Bash(python:*)",
-      "Bash(git add:*)",
-      "Bash(git commit -m \"$(cat <<''EOF''\nInitial commit: Dota 2 Shuffle Tournament System\n\nComplete Flask-based tournament management system with the following features:\n- Player registration with MMR and role selection\n- Admin dashboard for managing registration links\n- Team shuffling algorithm balancing by MMR and roles\n- Single-elimination bracket system with match tracking\n- Tournament champion display (top 5 players by MMR)\n- Scheduled registration opening/closing times with countdown timers\n- Team count selection (allowing reserves)\n- Cascade deletion of registration links\n- Master player list management\n- Bootstrap 5 UI with responsive design\n\nFixed timezone handling for scheduled registration times to use server local time consistently across client and server.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
-      "Bash(git push:*)",
-      "Bash(git commit -m \"$(cat <<''EOF''\nReplace all JavaScript alerts with Bootstrap toast notifications\n\n- Added global toast notification function in base.html\n- Created toast container with Bootstrap styling\n- Replaced all alert() calls with showToast() across all templates:\n  - admin_dashboard.html: Link operations and status updates\n  - admin_shuffle.html: Player CRUD operations and team shuffling\n  - admin_bracket.html: Match results and bracket operations\n  - shuffle.html: Public shuffle operations\n- Toast notifications support success, error, warning, and info types\n- Auto-dismiss after 3 seconds with smooth animations\n- Better UX with non-blocking notifications\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

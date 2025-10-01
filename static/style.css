@@ -245,6 +245,11 @@ code[style*="cursor: pointer"]:hover {
     opacity: 0.6;
 }
 
+.player-banned {
+    background-color: #ffe0e0 !important;
+    border-left: 4px solid #dc3545;
+}
+
 .icon-button {
     background: none;
     border: none;
