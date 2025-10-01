@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    alert('Error: ' + data.error);
+                    showToast('Error: ' + data.error, 'error');
                 } else if (data.champion) {
                     document.getElementById('champion-section').style.display = 'block';
                     document.getElementById('champion-team-name').textContent = data.champion.name;
@@ -110,7 +110,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         li.textContent = `${player.name} (${player.mmr})`;
                         playerList.appendChild(li);
                     });
+                    showToast('Champion declared! ' + data.champion.name, 'success');
                 } else {
+                    showToast('Winner set successfully!', 'success');
                     location.reload();
                 }
             });
@@ -127,9 +129,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
-                        alert('Error: ' + data.error);
+                        showToast('Error: ' + data.error, 'error');
                     } else {
-                        location.reload();
+                        showToast('Matchups re-shuffled successfully!', 'success');
+                        setTimeout(() => location.reload(), 1000);
                     }
                 });
             }
@@ -146,9 +149,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
-                        alert('Error: ' + data.error);
+                        showToast('Error: ' + data.error, 'error');
                     } else {
-                        location.reload();
+                        showToast('Bracket deleted successfully!', 'success');
+                        setTimeout(() => location.reload(), 1000);
                     }
                 });
             }

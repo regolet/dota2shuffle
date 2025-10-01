@@ -107,7 +107,7 @@ document.getElementById('shuffleBtn').addEventListener('click', function() {
         .then(response => response.json())
         .then(data => {
             if (data.error) {
-                alert(data.error);
+                showToast(data.error, 'error');
                 return;
             }
 
@@ -116,7 +116,7 @@ document.getElementById('shuffleBtn').addEventListener('click', function() {
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error shuffling teams. Please try again.');
+            showToast('Error shuffling teams. Please try again.', 'error');
         })
         .finally(() => {
             btn.disabled = false;
@@ -127,7 +127,7 @@ document.getElementById('shuffleBtn').addEventListener('click', function() {
 function displayTeams(data) {
     // Check if we have teams data
     if (!data.teams || data.teams.length === 0) {
-        alert('No teams generated. Please try again.');
+        showToast('No teams generated. Please try again.', 'warning');
         return;
     }
 

@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    alert('Error: ' + data.error);
+                    showToast('Error: ' + data.error, 'error');
                     return;
                 }
 
@@ -246,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred loading the shuffle.');
+                showToast('An error occurred loading the shuffle.', 'error');
             });
     });
 
@@ -263,7 +263,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    alert('Error: ' + data.error);
+                    showToast('Error: ' + data.error, 'error');
                     return;
                 }
 
@@ -322,7 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An unexpected error occurred. Please try again.');
+                showToast('An unexpected error occurred. Please try again.', 'error');
             })
             .finally(() => {
                 button.disabled = false;
@@ -348,9 +348,10 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.error) {
-                alert('Error: ' + data.error);
+                showToast('Error: ' + data.error, 'error');
             } else {
-                location.reload(); // Simple reload for now
+                showToast('Player added successfully!', 'success');
+                setTimeout(() => location.reload(), 1000);
             }
         });
     });
@@ -382,9 +383,10 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.error) {
-                alert('Error: ' + data.error);
+                showToast('Error: ' + data.error, 'error');
             } else {
-                location.reload(); // Simple reload for now
+                showToast('Player updated successfully!', 'success');
+                setTimeout(() => location.reload(), 1000);
             }
         });
     });
@@ -400,8 +402,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
-                        alert('Error: ' + data.error);
+                        showToast('Error: ' + data.error, 'error');
                     } else {
+                        showToast('Player deleted successfully!', 'success');
                         document.getElementById(`player-row-${playerId}`).remove();
                     }
                 });
@@ -419,10 +422,11 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    alert('Error: ' + data.error);
+                    showToast('Error: ' + data.error, 'error');
                 } else {
                     const playerRow = document.getElementById(`player-row-${playerId}`);
                     const statusIcon = this.querySelector('i');
+                    showToast(`Player status changed to ${data.new_status}`, 'success');
                     if (data.new_status === 'Present') {
                         playerRow.classList.remove('player-absent');
                         statusIcon.classList.remove('fa-times-circle', 'text-danger');

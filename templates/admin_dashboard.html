@@ -336,11 +336,11 @@ function showCopyError(btn, originalHTML) {
     btn.innerHTML = '<i class="fas fa-times"></i>';
     btn.classList.remove('btn-outline-primary');
     btn.classList.add('btn-danger');
-    
-    // Show the link in a modal or alert
+
+    // Show the link in a toast notification
     const linkText = btn.closest('td').querySelector('code').textContent;
-    alert('Copy failed. Please manually copy this link:\n\n' + linkText);
-    
+    showToast('Copy failed. Please manually copy this link: ' + linkText, 'error');
+
     setTimeout(() => {
         btn.innerHTML = originalHTML;
         btn.classList.remove('btn-danger');
@@ -440,16 +440,16 @@ document.getElementById('editLinkForm').addEventListener('submit', function(e) {
     .then(response => response.json())
     .then(data => {
         if (data.error) {
-            alert('Error: ' + data.error);
+            showToast('Error: ' + data.error, 'error');
         } else {
-            alert('Link updated successfully!');
+            showToast('Link updated successfully!', 'success');
             editLinkModal.hide();
             location.reload();
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('An error occurred. Please try again.');
+        showToast('An error occurred. Please try again.', 'error');
     });
 });
 
@@ -466,7 +466,7 @@ document.querySelectorAll('.btn-toggle-link').forEach(button => {
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    alert('Error: ' + data.error);
+                    showToast('Error: ' + data.error, 'error');
                 } else {
                     // Update button appearance and icon
                     if (data.is_active) {
@@ -487,11 +487,13 @@ document.querySelectorAll('.btn-toggle-link').forEach(button => {
                     } else {
                         statusCell.innerHTML = '<span class="badge bg-danger">Closed</span>';
                     }
+
+                    showToast('Registration status updated successfully!', 'success');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred. Please try again.');
+                showToast('An error occurred. Please try again.', 'error');
             });
         }
     });
@@ -510,15 +512,15 @@ document.querySelectorAll('.btn-delete-link').forEach(button => {
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
-                    alert('Error: ' + data.error);
+                    showToast('Error: ' + data.error, 'error');
                 } else {
-                    alert('Registration link deleted successfully!');
-                    location.reload();
+                    showToast('Registration link deleted successfully!', 'success');
+                    setTimeout(() => location.reload(), 1000);
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred. Please try again.');
+                showToast('An error occurred. Please try again.', 'error');
             });
         }
     });
