@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Register - Dota 2 Shuffle{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="fas fa-user-plus"></i> Player Registration
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h5 class="text-primary">{{ reg_link.title }}</h5>
+                    {% if reg_link.description %}
+                        <p class="text-muted">{{ reg_link.description }}</p>
+                    {% endif %}
+                    <small class="text-muted">
+                        <i class="fas fa-users"></i> Max Players: {{ 'Unlimited' if reg_link.max_players is none else reg_link.max_players }}
+                    </small>
+
+                    {% if not registration_opened and reg_link.opens_at %}
+                    <div class="mt-2">
+                        <div class="alert alert-warning mb-0">
+                            <i class="fas fa-hourglass-half"></i> <strong>Registration opens in:</strong>
+                            <div id="countdown-open" class="fs-5 fw-bold mt-1"></div>
+                        </div>
+                    </div>
+                    {% elif registration_opened and reg_link.expires_at %}
+                    <div class="mt-2">
+                        <div class="alert alert-info mb-0">
+                            <i class="fas fa-clock"></i> <strong>Registration closes in:</strong>
+                            <div id="countdown-close" class="fs-5 fw-bold mt-1"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if already_registered %}
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle"></i> Registration Complete!</h5>
+                    <p>You have successfully registered as <strong>{{ player_name }}</strong> for this event.</p>
+                    <p class="mb-0">Your registration is confirmed. You will be notified when the shuffle begins.</p>
+                </div>
+                {% elif not registration_opened %}
+                <div class="alert alert-warning">
+                    <h5><i class="fas fa-lock"></i> Registration Not Open Yet</h5>
+                    <p class="mb-0">Registration for this event has not started yet. Please wait until the scheduled opening time.</p>
+                </div>
+                {% else %}
+                <form method="POST" action="{{ url_for('submit_registration') }}">
+                    <input type="hidden" name="link_code" value="{{ reg_link.link_code }}">
+                    
+                    <div class="mb-3">
+                        <label for="player_name" class="form-label">Player Name *</label>
+                        <input type="text" class="form-control" id="player_name" name="player_name" required
+                               placeholder="Your in-game name">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="mmr" class="form-label">MMR *</label>
+                        <input type="number" class="form-control" id="mmr" name="mmr" required
+                               min="0" max="10000" placeholder="Your current MMR">
+                        <div class="form-text">Your current matchmaking rating</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Preferred Roles *</label>
+                        <div class="form-text mb-2">Select up to 2 roles you're comfortable playing (at least one required)</div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="preferred_roles" value="carry" id="role_carry">
+                                    <label class="form-check-label" for="role_carry">
+                                        <i class="fas fa-sword text-danger"></i> Carry
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="preferred_roles" value="mid" id="role_mid">
+                                    <label class="form-check-label" for="role_mid">
+                                        <i class="fas fa-bolt text-warning"></i> Mid
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="preferred_roles" value="offlane" id="role_offlane">
+                                    <label class="form-check-label" for="role_offlane">
+                                        <i class="fas fa-shield text-info"></i> Offlane
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="preferred_roles" value="support" id="role_support">
+                                    <label class="form-check-label" for="role_support">
+                                        <i class="fas fa-heart text-success"></i> Support
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="preferred_roles" value="hard_support" id="role_hard_support">
+                                    <label class="form-check-label" for="role_hard_support">
+                                        <i class="fas fa-plus-circle text-primary"></i> Hard Support
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-check"></i> Register
+                        </button>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const roleCheckboxes = document.querySelectorAll('input[name="preferred_roles"]');
+    const maxRoles = 2;
+
+    roleCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            const selectedRoles = document.querySelectorAll('input[name="preferred_roles"]:checked').length;
+
+            if (selectedRoles >= maxRoles) {
+                roleCheckboxes.forEach(cb => {
+                    if (!cb.checked) {
+                        cb.disabled = true;
+                    }
+                });
+            } else {
+                roleCheckboxes.forEach(cb => {
+                    cb.disabled = false;
+                });
+            }
+        });
+    });
+
+    // Countdown timer for registration opening
+    {% if not registration_opened and reg_link.opens_at %}
+    const opensAt = new Date('{{ reg_link.opens_at.strftime('%Y-%m-%dT%H:%M:%S') }}').getTime();
+    const countdownOpenElement = document.getElementById('countdown-open');
+
+    function updateCountdownOpen() {
+        const now = new Date().getTime();
+        const distance = opensAt - now;
+
+        if (distance < 0) {
+            countdownOpenElement.innerHTML = '<span class="text-success">Registration is now open! Refreshing...</span>';
+            setTimeout(() => location.reload(), 2000);
+            return;
+        }
+
+        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+        let countdownText = '';
+        if (days > 0) {
+            countdownText += `${days}d `;
+        }
+        countdownText += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+        countdownOpenElement.innerHTML = countdownText;
+    }
+
+    updateCountdownOpen();
+    setInterval(updateCountdownOpen, 1000);
+    {% endif %}
+
+    // Countdown timer for registration closing
+    {% if registration_opened and reg_link.expires_at %}
+    const expiresAt = new Date('{{ reg_link.expires_at.strftime('%Y-%m-%dT%H:%M:%S') }}').getTime();
+    const countdownCloseElement = document.getElementById('countdown-close');
+
+    function updateCountdownClose() {
+        const now = new Date().getTime();
+        const distance = expiresAt - now;
+
+        if (distance < 0) {
+            countdownCloseElement.innerHTML = '<span class="text-danger">Registration has closed</span>';
+            // Disable form if it exists
+            const form = document.querySelector('form');
+            if (form) {
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = true;
+                }
+            }
+            return;
+        }
+
+        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+        let countdownText = '';
+        if (days > 0) {
+            countdownText += `${days}d `;
+        }
+        countdownText += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+        countdownCloseElement.innerHTML = countdownText;
+    }
+
+    updateCountdownClose();
+    setInterval(updateCountdownClose, 1000);
+    {% endif %}
+});
+</script>
+{% endblock %}

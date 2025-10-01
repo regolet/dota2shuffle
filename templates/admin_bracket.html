@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Bracket - {{ reg_link.title }}{% endblock %}
+
+{% block styles %}
+<link href="{{ url_for('static', filename='bracket.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+            <i class="fas fa-sitemap"></i> Bracket for "{{ reg_link.title }}"
+        </h2>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            {% if rounds[1] and not rounds[1][0].winner_name %}
+            <button id="reshuffle-button" class="btn btn-warning" style="min-width: 200px; white-space: nowrap;">
+                <i class="fas fa-random"></i> Re-shuffle Matchups
+            </button>
+            {% endif %}
+            <button id="delete-bracket-button" class="btn btn-danger" style="min-width: 220px; white-space: nowrap;">
+                <i class="fas fa-trash"></i> Delete and Re-generate
+            </button>
+            <a href="{{ url_for('admin_shuffle', link_code=reg_link.link_code) }}" class="btn btn-outline-secondary" style="min-width: 170px; white-space: nowrap;">
+                <i class="fas fa-arrow-left"></i> Back to Shuffle
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-9">
+            <div class="bracket-container">
+                <div class="bracket-header">
+                    {% for round_number in rounds.keys()|sort %}
+                    <div class="round-title-container">
+                        <h4 class="round-title">Round {{ round_number }}</h4>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="bracket">
+                    {% for round_number in rounds.keys()|sort %}
+                    <div class="round">
+                        {% for match in rounds[round_number] %}
+                        <div class="match">
+                            <div class="match-content" id="match-{{ match.id }}">
+                                <div class="team team-top {% if match.winner_name == match.team1_name %}winner{% endif %}" data-match-id="{{ match.id }}" data-team-name="{{ match.team1_name }}">
+                                    {% if match.winner_name == match.team1_name %}👑{% endif %} {{ match.team1_name or 'TBD' }}
+                                </div>
+                                <div class="team team-bottom {% if match.winner_name == match.team2_name %}winner{% endif %}" data-match-id="{{ match.id }}" data-team-name="{{ match.team2_name }}">
+                                    {% if match.winner_name == match.team2_name %}👑{% endif %} {{ match.team2_name or 'TBD' }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3" id="champion-section" style="display: none;">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fas fa-trophy"></i> Tournament Champion!
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 id="champion-team-name"></h2>
+                    <p class="lead">Players:</p>
+                    <ul id="champion-player-list" class="list-group">
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/leader-line-new@1.1.9/leader-line.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Event Listeners ---
+    document.querySelectorAll('.team').forEach(teamElement => {
+        teamElement.addEventListener('click', function() {
+            const matchId = this.dataset.matchId;
+            const teamName = this.dataset.teamName;
+
+            if (!teamName || teamName === 'TBD') return;
+
+            const formData = new FormData();
+            formData.append('winner_name', teamName);
+
+            fetch(`/admin/match/${matchId}/set_winner`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else if (data.champion) {
+                    document.getElementById('champion-section').style.display = 'block';
+                    document.getElementById('champion-team-name').textContent = data.champion.name;
+                    const playerList = document.getElementById('champion-player-list');
+                    playerList.innerHTML = '';
+                    data.champion.players.forEach(player => {
+                        const li = document.createElement('li');
+                        li.classList.add('list-group-item');
+                        li.textContent = `${player.name} (${player.mmr})`;
+                        playerList.appendChild(li);
+                    });
+                } else {
+                    location.reload();
+                }
+            });
+        });
+    });
+
+    const reshuffleButton = document.getElementById('reshuffle-button');
+    if (reshuffleButton) {
+        reshuffleButton.addEventListener('click', function() {
+            if (confirm('Are you sure you want to re-shuffle the matchups? This cannot be undone.')) {
+                fetch(`/admin/bracket/{{ bracket.id }}/reshuffle`, {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                    } else {
+                        location.reload();
+                    }
+                });
+            }
+        });
+    }
+
+    const deleteButton = document.getElementById('delete-bracket-button');
+    if (deleteButton) {
+        deleteButton.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete and re-generate the bracket? All match results will be lost.')) {
+                fetch(`/admin/bracket/{{ bracket.id }}/delete`, {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                    } else {
+                        location.reload();
+                    }
+                });
+            }
+        });
+    }
+
+    // --- Check for existing champion on page load ---
+    {% if rounds %}
+    {% set final_round = rounds.keys()|sort|last %}
+    {% set final_match = rounds[final_round][0] %}
+    {% if final_match.winner_name %}
+    fetch('/admin/bracket/{{ bracket.id }}/champion')
+        .then(response => response.json())
+        .then(data => {
+            if (data.champion) {
+                document.getElementById('champion-section').style.display = 'block';
+                document.getElementById('champion-team-name').textContent = data.champion.name;
+                const playerList = document.getElementById('champion-player-list');
+                playerList.innerHTML = '';
+                data.champion.players.forEach(player => {
+                    const li = document.createElement('li');
+                    li.classList.add('list-group-item');
+                    li.textContent = `${player.name} (${player.mmr})`;
+                    playerList.appendChild(li);
+                });
+            }
+        });
+    {% endif %}
+    {% endif %}
+
+    // --- Draw Bracket Lines ---
+    const rounds = document.querySelectorAll('.round');
+    for (let i = 0; i < rounds.length - 1; i++) {
+        const currentRoundMatches = rounds[i].querySelectorAll('.match-content');
+        const nextRoundMatches = rounds[i+1].querySelectorAll('.match-content');
+
+        for (let j = 0; j < currentRoundMatches.length; j++) {
+            const nextMatchIndex = Math.floor(j / 2);
+            if (nextRoundMatches[nextMatchIndex]) {
+                new LeaderLine(
+                    currentRoundMatches[j],
+                    nextRoundMatches[nextMatchIndex],
+                    {
+                        startSocket: 'right',
+                        endSocket: 'left',
+                        path: 'straight',
+                        color: '#999',
+                        size: 2
+                    }
+                );
+            }
+        }
+    }
+});
+</script>
+{% endblock %}
