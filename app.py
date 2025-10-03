@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from datetime import datetime, timedelta
 import secrets
 import random
@@ -15,6 +16,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dota2shuffle.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Configure logging
 if not app.debug:
@@ -199,8 +201,87 @@ class Team(db.Model):
     name = db.Column(db.String(100), nullable=False)
     players = db.relationship('Player', secondary=team_players, lazy='subquery',
         backref=db.backref('teams', lazy=True))
-    
+
     bracket = db.relationship('Bracket', backref=db.backref('teams', lazy=True))
+
+# Lobby System Models
+class Lobby(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    lobby_code = db.Column(db.String(50), unique=True, nullable=False)
+    admin_id = db.Column(db.Integer, db.ForeignKey('admin.id'), nullable=False)
+    status = db.Column(db.String(20), default='active', nullable=False)  # active, closed
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    admin = db.relationship('Admin', backref=db.backref('lobbies', lazy=True))
+
+class LobbyPlayer(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    lobby_id = db.Column(db.Integer, db.ForeignKey('lobby.id'), nullable=False)
+    player_name = db.Column(db.String(100), nullable=False)
+    mmr = db.Column(db.Integer, nullable=False)
+    preferred_roles = db.Column(db.Text, nullable=False)  # JSON array
+    status = db.Column(db.String(20), default='waiting', nullable=False)  # waiting, in_party, ready
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    lobby = db.relationship('Lobby', backref=db.backref('players', lazy=True))
+
+class LobbyParty(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    lobby_id = db.Column(db.Integer, db.ForeignKey('lobby.id'), nullable=False)
+    party_name = db.Column(db.String(100), nullable=False)
+    leader_id = db.Column(db.Integer, db.ForeignKey('lobby_player.id'), nullable=False)
+    status = db.Column(db.String(20), default='forming', nullable=False)  # forming, ready
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    lobby = db.relationship('Lobby', backref=db.backref('parties', lazy=True))
+    leader = db.relationship('LobbyPlayer', foreign_keys=[leader_id])
+
+# Association table for party members
+party_members = db.Table('party_members',
+    db.Column('party_id', db.Integer, db.ForeignKey('lobby_party.id'), primary_key=True),
+    db.Column('player_id', db.Integer, db.ForeignKey('lobby_player.id'), primary_key=True)
+)
+
+class PartyInvite(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    party_id = db.Column(db.Integer, db.ForeignKey('lobby_party.id'), nullable=False)
+    from_player_id = db.Column(db.Integer, db.ForeignKey('lobby_player.id'), nullable=False)
+    to_player_id = db.Column(db.Integer, db.ForeignKey('lobby_player.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False)  # pending, accepted, declined
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    party = db.relationship('LobbyParty', backref=db.backref('invites', lazy=True))
+    from_player = db.relationship('LobbyPlayer', foreign_keys=[from_player_id])
+    to_player = db.relationship('LobbyPlayer', foreign_keys=[to_player_id])
+
+# Update LobbyParty to include members relationship
+LobbyParty.members = db.relationship('LobbyPlayer', secondary=party_members, lazy='subquery',
+    backref=db.backref('party', lazy=True))
+
+class LobbyBracket(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    lobby_id = db.Column(db.Integer, db.ForeignKey('lobby.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    status = db.Column(db.String(20), default='active', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    lobby = db.relationship('Lobby', backref=db.backref('brackets', lazy=True))
+
+class LobbyMatch(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    bracket_id = db.Column(db.Integer, db.ForeignKey('lobby_bracket.id'), nullable=False)
+    party1_id = db.Column(db.Integer, db.ForeignKey('lobby_party.id'), nullable=True)
+    party2_id = db.Column(db.Integer, db.ForeignKey('lobby_party.id'), nullable=True)
+    winner_id = db.Column(db.Integer, db.ForeignKey('lobby_party.id'), nullable=True)
+    round = db.Column(db.Integer, nullable=False)
+    match_number = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False)
+
+    bracket = db.relationship('LobbyBracket', backref=db.backref('matches', lazy=True))
+    party1 = db.relationship('LobbyParty', foreign_keys=[party1_id])
+    party2 = db.relationship('LobbyParty', foreign_keys=[party2_id])
+    winner = db.relationship('LobbyParty', foreign_keys=[winner_id])
 
 # Routes
 @app.route('/')
@@ -275,13 +356,28 @@ def submit_registration():
     masterlist_player = PlayerMasterlist.query.filter_by(player_name=player_name).first()
     final_mmr = int(mmr)
     masterlist_player_id = None
-    
+
     if masterlist_player:
+        # Check if player is banned
+        if masterlist_player.is_banned:
+            flash('You are banned from registering for events. Please contact the administrator.', 'error')
+            app.logger.warning(f'Banned player attempted registration: {player_name}')
+            return redirect(url_for('register', link_code=link_code))
+
         # Use real MMR from masterlist
         final_mmr = masterlist_player.real_mmr
         masterlist_player_id = masterlist_player.id
         flash(f'Welcome back {player_name}! Using your registered MMR: {final_mmr}', 'info')
     else:
+        # Create new masterlist entry for new player
+        new_masterlist_player = PlayerMasterlist(
+            player_name=player_name,
+            real_mmr=final_mmr
+        )
+        db.session.add(new_masterlist_player)
+        db.session.flush()  # Get the ID without committing
+        masterlist_player_id = new_masterlist_player.id
+        app.logger.info(f'New player added to masterlist: {player_name} (MMR: {final_mmr})')
         flash(f'New player {player_name} registered with MMR: {final_mmr}', 'info')
     
     try:
@@ -463,6 +559,74 @@ def api_shuffle_teams(link_code):
         'reserved': [{'id': p.id, 'name': p.player_name, 'mmr': p.mmr, 'roles': json.loads(p.preferred_roles)} for p in reserved_players]
     })
 
+@app.route('/api/replacement_candidates/<link_code>')
+def api_replacement_candidates(link_code):
+    """Get list of players who can be used as replacements (reserves and absent players)"""
+    reg_link = RegistrationLink.query.filter_by(link_code=link_code, is_active=True).first()
+    if not reg_link:
+        return jsonify({'error': 'Invalid link'}), 400
+
+    # Get all registered players who are either absent or could be reserves
+    all_players = Player.query.filter_by(registration_link_id=reg_link.id).all()
+
+    # Filter out banned players
+    candidates = []
+    for player in all_players:
+        if player.masterlist_player_id:
+            masterlist_player = PlayerMasterlist.query.get(player.masterlist_player_id)
+            if masterlist_player and masterlist_player.is_banned:
+                continue
+
+        candidates.append({
+            'id': player.id,
+            'name': player.player_name,
+            'mmr': player.mmr,
+            'status': player.status
+        })
+
+    return jsonify({'players': candidates})
+
+@app.route('/api/replace_player', methods=['POST'])
+def api_replace_player():
+    """Replace a player in a team with another player"""
+    data = request.get_json()
+    link_code = data.get('link_code')
+    current_player_id = data.get('current_player_id')
+    replacement_player_id = data.get('replacement_player_id')
+
+    if not all([link_code, current_player_id, replacement_player_id]):
+        return jsonify({'error': 'Missing required parameters'}), 400
+
+    reg_link = RegistrationLink.query.filter_by(link_code=link_code, is_active=True).first()
+    if not reg_link:
+        return jsonify({'error': 'Invalid link'}), 400
+
+    current_player = Player.query.get(current_player_id)
+    replacement_player = Player.query.get(replacement_player_id)
+
+    if not current_player or not replacement_player:
+        return jsonify({'error': 'Player not found'}), 404
+
+    # Check if replacement player is banned
+    if replacement_player.masterlist_player_id:
+        masterlist_player = PlayerMasterlist.query.get(replacement_player.masterlist_player_id)
+        if masterlist_player and masterlist_player.is_banned:
+            return jsonify({'error': 'Cannot use a banned player as replacement'}), 400
+
+    # Update statuses: current player becomes absent, replacement becomes present
+    current_player.status = 'Absent'
+    replacement_player.status = 'Present'
+
+    db.session.commit()
+
+    app.logger.info(f'Player replacement: {current_player.player_name} -> {replacement_player.player_name} for event: {reg_link.title}')
+
+    return jsonify({
+        'message': 'Player replaced successfully',
+        'current_player': current_player.player_name,
+        'replacement_player': replacement_player.player_name
+    })
+
 # Admin routes
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
@@ -492,6 +656,318 @@ def admin_dashboard():
     
     return render_template('admin_dashboard.html', admin=admin, reg_links=reg_links)
 
+# Lobby Routes
+@app.route('/admin/lobbies')
+def admin_lobbies():
+    if 'admin_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    admin_id = session['admin_id']
+    lobbies = Lobby.query.filter_by(admin_id=admin_id).order_by(Lobby.created_at.desc()).all()
+
+    lobbies_data = []
+    for lobby in lobbies:
+        lobbies_data.append({
+            'id': lobby.id,
+            'name': lobby.name,
+            'lobby_code': lobby.lobby_code,
+            'status': lobby.status,
+            'player_count': len(lobby.players),
+            'party_count': len(lobby.parties)
+        })
+
+    return jsonify({'lobbies': lobbies_data})
+
+@app.route('/admin/lobby/create', methods=['POST'])
+def admin_create_lobby():
+    if 'admin_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    lobby_name = request.form.get('lobby_name')
+    if not lobby_name:
+        return jsonify({'error': 'Lobby name is required'}), 400
+
+    # Generate unique lobby code
+    lobby_code = secrets.token_urlsafe(16)
+
+    new_lobby = Lobby(
+        name=lobby_name,
+        lobby_code=lobby_code,
+        admin_id=session['admin_id']
+    )
+
+    db.session.add(new_lobby)
+    db.session.commit()
+
+    app.logger.info(f'Lobby created: {lobby_name} (Code: {lobby_code}) by admin {session["admin_username"]}')
+
+    return jsonify({
+        'message': 'Lobby created successfully',
+        'lobby_code': lobby_code
+    })
+
+@app.route('/admin/lobby/<int:lobby_id>/close', methods=['POST'])
+def admin_close_lobby(lobby_id):
+    if 'admin_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    lobby = Lobby.query.get_or_404(lobby_id)
+
+    if lobby.admin_id != session['admin_id']:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    lobby.status = 'closed'
+    db.session.commit()
+
+    # Notify all players in lobby via WebSocket
+    socketio.emit('lobby_closed', {'message': 'Lobby has been closed by admin'}, room=f'lobby_{lobby.lobby_code}')
+
+    return jsonify({'message': 'Lobby closed successfully'})
+
+@app.route('/admin/lobby/<lobby_code>/manage')
+def admin_lobby_manage(lobby_code):
+    if 'admin_id' not in session:
+        return redirect(url_for('admin_login'))
+
+    lobby = Lobby.query.filter_by(lobby_code=lobby_code).first_or_404()
+
+    if lobby.admin_id != session['admin_id']:
+        flash('Unauthorized access to this lobby', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    # Get all players in the lobby
+    players = LobbyPlayer.query.filter_by(lobby_id=lobby.id).order_by(LobbyPlayer.joined_at).all()
+
+    # Get all parties in the lobby
+    parties = LobbyParty.query.filter_by(lobby_id=lobby.id).order_by(LobbyParty.created_at).all()
+
+    # Get ready parties (status='ready' and exactly 5 members)
+    ready_parties = [party for party in parties if party.status == 'ready' and len(party.members) == 5]
+
+    return render_template('admin_lobby.html',
+                         lobby=lobby,
+                         players=players,
+                         parties=parties,
+                         ready_parties=ready_parties)
+
+@app.route('/admin/lobby/<lobby_code>/create-bracket', methods=['POST'])
+def admin_lobby_create_bracket(lobby_code):
+    if 'admin_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    lobby = Lobby.query.filter_by(lobby_code=lobby_code).first_or_404()
+
+    if lobby.admin_id != session['admin_id']:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    data = request.get_json()
+    bracket_name = data.get('bracket_name')
+    party_ids = data.get('party_ids', [])
+
+    if not bracket_name:
+        return jsonify({'error': 'Bracket name is required'}), 400
+
+    if len(party_ids) < 2:
+        return jsonify({'error': 'At least 2 parties are required'}), 400
+
+    # Verify all parties are ready (5 members each)
+    parties = LobbyParty.query.filter(LobbyParty.id.in_(party_ids)).all()
+
+    for party in parties:
+        if party.status != 'ready' or len(party.members) != 5:
+            return jsonify({'error': f'Party {party.party_name} is not ready'}), 400
+
+    # Create a new lobby bracket
+    bracket = LobbyBracket(
+        lobby_id=lobby.id,
+        bracket_name=bracket_name,
+        status='active',
+        num_teams=len(party_ids)
+    )
+    db.session.add(bracket)
+    db.session.commit()
+
+    # Create matches for the bracket
+    num_teams = len(parties)
+    total_rounds = math.ceil(math.log2(num_teams))
+
+    # First round matches
+    num_matches_first_round = num_teams // 2
+
+    # Assign parties to first round matches
+    for i in range(num_matches_first_round):
+        team1_party = parties[i * 2] if i * 2 < len(parties) else None
+        team2_party = parties[i * 2 + 1] if i * 2 + 1 < len(parties) else None
+
+        match = LobbyMatch(
+            bracket_id=bracket.id,
+            round_number=1,
+            match_number=i + 1,
+            team1_name=team1_party.party_name if team1_party else None,
+            team2_name=team2_party.party_name if team2_party else None,
+            team1_party_id=team1_party.id if team1_party else None,
+            team2_party_id=team2_party.id if team2_party else None
+        )
+        db.session.add(match)
+
+    # Create placeholder matches for subsequent rounds
+    for round_num in range(2, total_rounds + 1):
+        num_matches_in_round = 2 ** (total_rounds - round_num)
+        for match_num in range(num_matches_in_round):
+            match = LobbyMatch(
+                bracket_id=bracket.id,
+                round_number=round_num,
+                match_number=match_num + 1
+            )
+            db.session.add(match)
+
+    db.session.commit()
+
+    app.logger.info(f'Lobby bracket created: {bracket_name} for lobby {lobby.name} with {num_teams} teams by admin {session["admin_username"]}')
+
+    return jsonify({
+        'message': 'Bracket created successfully',
+        'bracket_id': bracket.id,
+        'redirect_url': url_for('admin_lobby_bracket', lobby_code=lobby_code, bracket_id=bracket.id)
+    })
+
+@app.route('/admin/lobby/<lobby_code>/bracket/<int:bracket_id>')
+def admin_lobby_bracket(lobby_code, bracket_id):
+    if 'admin_id' not in session:
+        return redirect(url_for('admin_login'))
+
+    lobby = Lobby.query.filter_by(lobby_code=lobby_code).first_or_404()
+
+    if lobby.admin_id != session['admin_id']:
+        flash('Unauthorized access to this lobby', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    bracket = LobbyBracket.query.get_or_404(bracket_id)
+
+    if bracket.lobby_id != lobby.id:
+        flash('Invalid bracket for this lobby', 'error')
+        return redirect(url_for('admin_lobby_manage', lobby_code=lobby_code))
+
+    # Get all matches for this bracket
+    matches = LobbyMatch.query.filter_by(bracket_id=bracket.id).order_by(LobbyMatch.round_number, LobbyMatch.match_number).all()
+
+    return render_template('admin_lobby_bracket.html',
+                         lobby=lobby,
+                         bracket=bracket,
+                         matches=matches)
+
+@app.route('/admin/lobby/match/<int:match_id>/set_winner', methods=['POST'])
+def admin_lobby_match_set_winner(match_id):
+    if 'admin_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    match = LobbyMatch.query.get_or_404(match_id)
+    bracket = LobbyBracket.query.get_or_404(match.bracket_id)
+    lobby = Lobby.query.get_or_404(bracket.lobby_id)
+
+    if lobby.admin_id != session['admin_id']:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    data = request.get_json()
+    winner_name = data.get('winner_name')
+    winner_party_id = data.get('winner_party_id')
+
+    if not winner_name:
+        return jsonify({'error': 'Winner name is required'}), 400
+
+    # Set the winner for this match
+    match.winner_name = winner_name
+    match.winner_party_id = winner_party_id
+    db.session.commit()
+
+    # Advance winner to next round
+    total_rounds = math.ceil(math.log2(bracket.num_teams))
+
+    if match.round_number < total_rounds:
+        next_round = match.round_number + 1
+        next_match_number = (match.match_number + 1) // 2
+
+        next_match = LobbyMatch.query.filter_by(
+            bracket_id=bracket.id,
+            round_number=next_round,
+            match_number=next_match_number
+        ).first()
+
+        if next_match:
+            # Determine if winner goes to team1 or team2 in next match
+            if match.match_number % 2 == 1:  # Odd match number goes to team1
+                next_match.team1_name = winner_name
+                next_match.team1_party_id = winner_party_id
+            else:  # Even match number goes to team2
+                next_match.team2_name = winner_name
+                next_match.team2_party_id = winner_party_id
+
+            db.session.commit()
+
+    app.logger.info(f'Match {match_id} winner set to {winner_name} in lobby bracket {bracket.bracket_name}')
+
+    return jsonify({'message': 'Winner set successfully'})
+
+@app.route('/admin/lobby/bracket/<int:bracket_id>/delete', methods=['POST'])
+def admin_lobby_bracket_delete(bracket_id):
+    if 'admin_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    bracket = LobbyBracket.query.get_or_404(bracket_id)
+    lobby = Lobby.query.get_or_404(bracket.lobby_id)
+
+    if lobby.admin_id != session['admin_id']:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    # Delete all matches associated with this bracket
+    LobbyMatch.query.filter_by(bracket_id=bracket.id).delete()
+
+    # Delete the bracket
+    db.session.delete(bracket)
+    db.session.commit()
+
+    app.logger.info(f'Lobby bracket {bracket.bracket_name} deleted by admin {session["admin_username"]}')
+
+    return jsonify({'message': 'Bracket deleted successfully'})
+
+@app.route('/admin/lobby/bracket/<int:bracket_id>/champion')
+def admin_lobby_bracket_champion(bracket_id):
+    if 'admin_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    bracket = LobbyBracket.query.get_or_404(bracket_id)
+    lobby = Lobby.query.get_or_404(bracket.lobby_id)
+
+    if lobby.admin_id != session['admin_id']:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    # Find the final match (last round)
+    total_rounds = math.ceil(math.log2(bracket.num_teams))
+    final_match = LobbyMatch.query.filter_by(
+        bracket_id=bracket.id,
+        round_number=total_rounds
+    ).first()
+
+    if final_match and final_match.winner_name:
+        # Get the winning party
+        winning_party = LobbyParty.query.get(final_match.winner_party_id)
+
+        if winning_party:
+            champion_players = []
+            for member in winning_party.members:
+                champion_players.append({
+                    'player_name': member.player_name,
+                    'preferred_roles': member.preferred_roles.split(',')
+                })
+
+            return jsonify({
+                'champion': {
+                    'name': final_match.winner_name,
+                    'players': champion_players
+                }
+            })
+
+    return jsonify({'champion': None})
 
 @app.route('/admin/shuffle/<link_code>')
 def admin_shuffle(link_code):
@@ -1133,6 +1609,515 @@ def load_shuffle(bracket_id):
     
     return jsonify({'teams': sorted(teams_data, key=lambda x: x['avg_mmr'], reverse=True)})
 
+# Player Lobby Routes
+@app.route('/lobby/<lobby_code>')
+def lobby_join(lobby_code):
+    lobby = Lobby.query.filter_by(lobby_code=lobby_code).first()
+    if not lobby:
+        flash('Invalid lobby code', 'error')
+        return redirect(url_for('index'))
+
+    if lobby.status != 'active':
+        flash('This lobby is closed', 'error')
+        return redirect(url_for('index'))
+
+    return render_template('lobby.html', lobby=lobby)
+
+@app.route('/api/lobby/<lobby_code>/join', methods=['POST'])
+def api_lobby_join(lobby_code):
+    lobby = Lobby.query.filter_by(lobby_code=lobby_code, status='active').first()
+    if not lobby:
+        return jsonify({'error': 'Invalid or closed lobby'}), 400
+
+    player_name = request.json.get('player_name')
+    mmr = request.json.get('mmr')
+    preferred_roles = request.json.get('preferred_roles', [])
+
+    if not player_name or not mmr or not preferred_roles:
+        return jsonify({'error': 'Player name, MMR, and roles are required'}), 400
+
+    if len(preferred_roles) != 2:
+        return jsonify({'error': 'Please select exactly 2 roles'}), 400
+
+    # Check if player already joined
+    existing = LobbyPlayer.query.filter_by(lobby_id=lobby.id, player_name=player_name).first()
+    if existing:
+        return jsonify({'error': 'You have already joined this lobby', 'player_id': existing.id}), 200
+
+    new_player = LobbyPlayer(
+        lobby_id=lobby.id,
+        player_name=player_name,
+        mmr=mmr,
+        preferred_roles=','.join(preferred_roles)
+    )
+
+    db.session.add(new_player)
+    db.session.commit()
+
+    # Broadcast new player to lobby
+    socketio.emit('player_joined', {
+        'id': new_player.id,
+        'player_name': player_name,
+        'mmr': mmr,
+        'preferred_roles': preferred_roles,
+        'status': 'waiting'
+    }, room=f'lobby_{lobby_code}')
+
+    return jsonify({'message': 'Joined lobby successfully', 'player_id': new_player.id})
+
+# WebSocket Events
+@socketio.on('join_lobby')
+def handle_join_lobby(data):
+    lobby_code = data.get('lobby_code')
+    join_room(f'lobby_{lobby_code}')
+
+    # Send current lobby state
+    lobby = Lobby.query.filter_by(lobby_code=lobby_code).first()
+    if lobby:
+        # Get all party leaders for easier checking
+        party_leaders = {party.leader_id for party in lobby.parties}
+
+        players_data = [{
+            'id': p.id,
+            'player_name': p.player_name,
+            'mmr': p.mmr,
+            'preferred_roles': p.preferred_roles.split(','),
+            'status': p.status,
+            'is_party_leader': p.id in party_leaders,
+            'party_id': p.party[0].id if p.party else None
+        } for p in lobby.players]
+
+        parties_data = []
+        for party in lobby.parties:
+            party_members = [{
+                'id': m.id,
+                'player_name': m.player_name,
+                'mmr': m.mmr,
+                'preferred_roles': m.preferred_roles.split(',')
+            } for m in party.members]
+
+            parties_data.append({
+                'id': party.id,
+                'party_name': party.party_name,
+                'leader_id': party.leader_id,
+                'members': party_members,
+                'status': party.status
+            })
+
+        emit('lobby_state', {
+            'players': players_data,
+            'parties': parties_data
+        })
+
+@socketio.on('create_party')
+def handle_create_party(data):
+    player_id = data.get('player_id')
+    lobby_code = data.get('lobby_code')
+
+    player = LobbyPlayer.query.get(player_id)
+    if not player:
+        emit('error', {'message': 'Player not found'})
+        return
+
+    # Check if player is already in a party
+    if player.party:
+        emit('error', {'message': 'You are already in a party'})
+        return
+
+    party = LobbyParty(
+        lobby_id=player.lobby_id,
+        party_name=f"{player.player_name}'s Party",
+        leader_id=player_id
+    )
+
+    db.session.add(party)
+    db.session.flush()
+
+    # Add leader to party
+    party.members.append(player)
+    player.status = 'in_party'
+
+    db.session.commit()
+
+    # Broadcast party creation
+    socketio.emit('party_created', {
+        'id': party.id,
+        'party_name': party.party_name,
+        'leader_id': player_id,
+        'members': [{
+            'id': player.id,
+            'player_name': player.player_name,
+            'mmr': player.mmr,
+            'preferred_roles': player.preferred_roles.split(',')
+        }],
+        'status': party.status
+    }, room=f'lobby_{lobby_code}')
+
+@socketio.on('send_invite')
+def handle_send_invite(data):
+    party_id = data.get('party_id')
+    from_player_id = data.get('from_player_id')
+    to_player_id = data.get('to_player_id')
+    lobby_code = data.get('lobby_code')
+
+    party = LobbyParty.query.get(party_id)
+    if not party or party.leader_id != from_player_id:
+        emit('error', {'message': 'Only party leader can send invites'})
+        return
+
+    # Check if party is full
+    if len(party.members) >= 5:
+        emit('error', {'message': 'Party is full'})
+        return
+
+    # Check if player is already invited or in party
+    existing_invite = PartyInvite.query.filter_by(
+        party_id=party_id,
+        to_player_id=to_player_id,
+        status='pending'
+    ).first()
+
+    if existing_invite:
+        emit('error', {'message': 'Player already has a pending invite'})
+        return
+
+    to_player = LobbyPlayer.query.get(to_player_id)
+    if to_player.status != 'waiting':
+        emit('error', {'message': 'Player is not available'})
+        return
+
+    invite = PartyInvite(
+        party_id=party_id,
+        from_player_id=from_player_id,
+        to_player_id=to_player_id
+    )
+
+    db.session.add(invite)
+    db.session.commit()
+
+    from_player = LobbyPlayer.query.get(from_player_id)
+
+    # Send invite to specific player
+    socketio.emit('invite_received', {
+        'invite_id': invite.id,
+        'party_id': party_id,
+        'party_name': party.party_name,
+        'from_player': from_player.player_name,
+        'to_player_id': to_player_id
+    }, room=f'lobby_{lobby_code}')
+
+@socketio.on('request_join_party')
+def handle_request_join_party(data):
+    party_id = data.get('party_id')
+    player_id = data.get('player_id')
+    lobby_code = data.get('lobby_code')
+
+    party = LobbyParty.query.get(party_id)
+    if not party:
+        emit('error', {'message': 'Party not found'})
+        return
+
+    player = LobbyPlayer.query.get(player_id)
+    if not player:
+        emit('error', {'message': 'Player not found'})
+        return
+
+    # Check if party is full
+    if len(party.members) >= 5:
+        emit('error', {'message': 'Party is full'})
+        return
+
+    # Check if player is already in a party
+    if player.status != 'waiting':
+        emit('error', {'message': 'You are already in a party'})
+        return
+
+    # Check for existing pending request
+    existing_invite = PartyInvite.query.filter_by(
+        party_id=party_id,
+        to_player_id=player_id,
+        status='pending'
+    ).first()
+
+    if existing_invite:
+        emit('error', {'message': 'You already have a pending request for this party'})
+        return
+
+    # Create join request (stored as invite from player to party leader)
+    join_request = PartyInvite(
+        party_id=party_id,
+        from_player_id=player_id,  # Player requesting
+        to_player_id=party.leader_id  # Send to leader
+    )
+    db.session.add(join_request)
+    db.session.commit()
+
+    # Notify party leader
+    socketio.emit('join_request_received', {
+        'request_id': join_request.id,
+        'party_id': party_id,
+        'party_name': party.party_name,
+        'player_id': player_id,
+        'player_name': player.player_name,
+        'leader_id': party.leader_id
+    }, room=f'lobby_{lobby_code}')
+
+@socketio.on('respond_invite')
+def handle_respond_invite(data):
+    invite_id = data.get('invite_id')
+    accepted = data.get('accepted')
+    lobby_code = data.get('lobby_code')
+
+    invite = PartyInvite.query.get(invite_id)
+    if not invite or invite.status != 'pending':
+        emit('error', {'message': 'Invalid invite'})
+        return
+
+    if accepted:
+        party = LobbyParty.query.get(invite.party_id)
+
+        # Determine if this is a regular invite or join request
+        # If to_player is the leader, then from_player is requesting to join
+        # If from_player is the leader, then to_player is being invited
+        if invite.to_player_id == party.leader_id:
+            # Join request: from_player wants to join
+            player = LobbyPlayer.query.get(invite.from_player_id)
+        else:
+            # Regular invite: to_player is being invited
+            player = LobbyPlayer.query.get(invite.to_player_id)
+
+        if len(party.members) >= 5:
+            invite.status = 'declined'
+            db.session.commit()
+            emit('error', {'message': 'Party is now full'})
+            return
+
+        # Check if player is already in the party
+        if player in party.members:
+            invite.status = 'declined'
+            db.session.commit()
+            emit('error', {'message': 'Player is already in the party'})
+            return
+
+        party.members.append(player)
+        player.status = 'in_party'
+        invite.status = 'accepted'
+
+        # Check if party is full
+        if len(party.members) == 5:
+            party.status = 'ready'
+
+        db.session.commit()
+
+        # Broadcast party update
+        members_data = [{
+            'id': m.id,
+            'player_name': m.player_name,
+            'mmr': m.mmr,
+            'preferred_roles': m.preferred_roles.split(',')
+        } for m in party.members]
+
+        socketio.emit('party_updated', {
+            'party_id': party.id,
+            'members': members_data,
+            'status': party.status
+        }, room=f'lobby_{lobby_code}')
+
+        socketio.emit('invite_accepted', {
+            'invite_id': invite_id,
+            'player_id': player.id,
+            'party_id': party.id
+        }, room=f'lobby_{lobby_code}')
+
+        # Broadcast notification
+        socketio.emit('party_notification', {
+            'message': f'{player.player_name} joined {party.party_name}',
+            'type': 'success'
+        }, room=f'lobby_{lobby_code}')
+
+    else:
+        invite.status = 'declined'
+        db.session.commit()
+
+        # Get player name for notification
+        from_player = LobbyPlayer.query.get(invite.from_player_id)
+        to_player = LobbyPlayer.query.get(invite.to_player_id)
+
+        socketio.emit('invite_declined', {
+            'invite_id': invite_id,
+            'player_id': invite.to_player_id
+        }, room=f'lobby_{lobby_code}')
+
+        # Broadcast notification
+        socketio.emit('party_notification', {
+            'message': f'{to_player.player_name} declined invitation',
+            'type': 'info'
+        }, room=f'lobby_{lobby_code}')
+
+@socketio.on('leave_party')
+def handle_leave_party(data):
+    player_id = data.get('player_id')
+    lobby_code = data.get('lobby_code')
+
+    player = LobbyPlayer.query.get(player_id)
+    if not player or not player.party:
+        emit('error', {'message': 'Not in a party'})
+        return
+
+    party = player.party[0]  # Get first party (player can only be in one party)
+
+    # If leader leaves, disband party
+    if party.leader_id == player_id:
+        # Remove all members and delete party
+        for member in party.members:
+            member.status = 'waiting'
+
+        # Delete all pending invites for this party
+        PartyInvite.query.filter_by(party_id=party.id).delete()
+
+        db.session.delete(party)
+        db.session.commit()
+
+        socketio.emit('party_disbanded', {
+            'party_id': party.id
+        }, room=f'lobby_{lobby_code}')
+    else:
+        # Remove player from party
+        party.members.remove(player)
+        player.status = 'waiting'
+        db.session.commit()
+
+        members_data = [{
+            'id': m.id,
+            'player_name': m.player_name,
+            'mmr': m.mmr,
+            'preferred_roles': m.preferred_roles.split(',')
+        } for m in party.members]
+
+        socketio.emit('party_updated', {
+            'party_id': party.id,
+            'members': members_data,
+            'status': 'forming' if len(party.members) < 5 else 'ready'
+        }, room=f'lobby_{lobby_code}')
+
+        # Broadcast notification
+        socketio.emit('party_notification', {
+            'message': f'{player.player_name} left {party.party_name}',
+            'type': 'info'
+        }, room=f'lobby_{lobby_code}')
+
+@socketio.on('disband_party')
+def handle_disband_party(data):
+    party_id = data.get('party_id')
+    lobby_code = data.get('lobby_code')
+
+    party = LobbyParty.query.get(party_id)
+    if not party:
+        emit('error', {'message': 'Party not found'})
+        return
+
+    # Remove all members from party and set them to waiting
+    for member in party.members:
+        member.status = 'waiting'
+
+    # Delete all pending invites for this party
+    PartyInvite.query.filter_by(party_id=party.id).delete()
+
+    # Delete the party
+    db.session.delete(party)
+    db.session.commit()
+
+    # Broadcast party disbanded
+    socketio.emit('party_disbanded', {
+        'party_id': party_id
+    }, room=f'lobby_{lobby_code}')
+
+@socketio.on('mark_party_ready')
+def handle_mark_party_ready(data):
+    party_id = data.get('party_id')
+    lobby_code = data.get('lobby_code')
+
+    party = LobbyParty.query.get(party_id)
+    if not party:
+        emit('error', {'message': 'Party not found'})
+        return
+
+    # Check if party has 5 members
+    if len(party.members) != 5:
+        emit('error', {'message': 'Party must have exactly 5 members to be ready'})
+        return
+
+    # Mark party as ready
+    party.status = 'ready'
+    db.session.commit()
+
+    # Broadcast party updated
+    members_data = [{
+        'id': m.id,
+        'player_name': m.player_name,
+        'mmr': m.mmr,
+        'preferred_roles': m.preferred_roles.split(',')
+    } for m in party.members]
+
+    socketio.emit('party_updated', {
+        'party_id': party.id,
+        'members': members_data,
+        'status': 'ready'
+    }, room=f'lobby_{lobby_code}')
+
+    # Broadcast notification
+    socketio.emit('party_notification', {
+        'message': f'{party.party_name} is now ready!',
+        'type': 'success'
+    }, room=f'lobby_{lobby_code}')
+
+@socketio.on('kick_member')
+def handle_kick_member(data):
+    player_id = data.get('player_id')
+    party_id = data.get('party_id')
+    lobby_code = data.get('lobby_code')
+
+    party = LobbyParty.query.get(party_id)
+    if not party:
+        emit('error', {'message': 'Party not found'})
+        return
+
+    player = LobbyPlayer.query.get(player_id)
+    if not player:
+        emit('error', {'message': 'Player not found'})
+        return
+
+    # Cannot kick the party leader
+    if player.id == party.leader_id:
+        emit('error', {'message': 'Cannot kick the party leader'})
+        return
+
+    # Remove player from party
+    if player in party.members:
+        party.members.remove(player)
+        player.status = 'waiting'
+        db.session.commit()
+
+        # Broadcast party updated
+        members_data = [{
+            'id': m.id,
+            'player_name': m.player_name,
+            'mmr': m.mmr,
+            'preferred_roles': m.preferred_roles.split(',')
+        } for m in party.members]
+
+        socketio.emit('party_updated', {
+            'party_id': party.id,
+            'members': members_data,
+            'status': 'forming' if len(party.members) < 5 else 'ready'
+        }, room=f'lobby_{lobby_code}')
+
+        # Broadcast notification
+        socketio.emit('party_notification', {
+            'message': f'{player.player_name} was kicked from {party.party_name}',
+            'type': 'warning'
+        }, room=f'lobby_{lobby_code}')
+
 # Initialize database
 def create_tables():
     db.create_all()
@@ -1164,4 +2149,4 @@ def init_database():
 
 if __name__ == '__main__':
     init_database()
-    app.run(debug=True)
+    socketio.run(app, debug=True)

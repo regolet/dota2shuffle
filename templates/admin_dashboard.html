@@ -10,7 +10,7 @@
                 <i class="fas fa-tachometer-alt"></i> Admin Dashboard
             </h2>
             <div>
-                <a href="{{ url_for('admin_masterlist') }}" class="btn btn-outline-info btn-sm me-2">
+                <a href="{{ url_for('admin_masterlist') }}" class="btn btn-outline-info me-2">
                     <i class="fas fa-users"></i> Player Masterlist
                 </a>
                 <span class="text-muted">Welcome, {{ admin.username }}</span>
@@ -22,21 +22,32 @@
     </div>
 </div>
 
-<div class="row">
-    <div class="col-12 mb-3">
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createLinkModal">
-            <i class="fas fa-plus"></i> Create Registration Link
+<!-- Nav Tabs -->
+<ul class="nav nav-tabs mt-4" id="adminTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="registration-tab" data-bs-toggle="tab" data-bs-target="#registration-panel" type="button" role="tab">
+            <i class="fas fa-list"></i> Registration Links
         </button>
-    </div>
-</div>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="lobby-tab" data-bs-toggle="tab" data-bs-target="#lobby-panel" type="button" role="tab">
+            <i class="fas fa-users-cog"></i> Lobbies
+        </button>
+    </li>
+</ul>
 
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card shadow">
-            <div class="card-header bg-secondary text-white">
+<!-- Tab Content -->
+<div class="tab-content" id="adminTabsContent">
+    <!-- Registration Links Panel -->
+    <div class="tab-pane fade show active" id="registration-panel" role="tabpanel">
+        <div class="card shadow mt-3">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
                     <i class="fas fa-list"></i> Registration Links
                 </h5>
+                <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#createLinkModal">
+                    <i class="fas fa-plus"></i> Create Registration Link
+                </button>
             </div>
             <div class="card-body">
                 {% if reg_links %}
@@ -148,6 +159,28 @@
                     <p class="text-muted">Create your first registration link using the form above.</p>
                 </div>
                 {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Lobbies Panel -->
+    <div class="tab-pane fade" id="lobby-panel" role="tabpanel">
+        <div class="card shadow mt-3">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-users-cog"></i> Lobbies
+                </h5>
+                <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#createLobbyModal">
+                    <i class="fas fa-plus"></i> Create Lobby
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="lobbies-list">
+                    <div class="text-center py-4">
+                        <i class="fas fa-spinner fa-spin fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">Loading lobbies...</h5>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -267,6 +300,33 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create Lobby Modal -->
+<div class="modal fade" id="createLobbyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Lobby</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createLobbyForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="lobby_name" class="form-label">Lobby Name *</label>
+                        <input type="text" class="form-control" id="lobby_name" name="lobby_name" required
+                               placeholder="e.g., Friday Night Dota">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create Lobby
+                    </button>
                 </div>
             </form>
         </div>
@@ -523,6 +583,103 @@ document.querySelectorAll('.btn-delete-link').forEach(button => {
                 showToast('An error occurred. Please try again.', 'error');
             });
         }
+    });
+});
+
+// ========== LOBBY FUNCTIONALITY ==========
+
+// Load lobbies when tab is clicked
+document.getElementById('lobby-tab').addEventListener('click', function() {
+    loadLobbies();
+});
+
+function loadLobbies() {
+    fetch('/admin/lobbies')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('lobbies-list');
+            if (data.lobbies && data.lobbies.length > 0) {
+                let html = '<div class="table-responsive"><table class="table table-hover">';
+                html += '<thead><tr><th>Name</th><th>Link</th><th>Players</th><th>Parties</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+
+                data.lobbies.forEach(lobby => {
+                    const lobbyUrl = `${window.location.origin}/lobby/${lobby.lobby_code}`;
+                    html += `<tr>
+                        <td><strong>${lobby.name}</strong></td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <code class="small me-2">${lobbyUrl}</code>
+                                <button class="btn btn-sm btn-outline-primary" onclick="copyToClipboard('${lobbyUrl}')" title="Copy lobby link">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td><span class="badge bg-primary">${lobby.player_count}</span></td>
+                        <td><span class="badge bg-success">${lobby.party_count}</span></td>
+                        <td><span class="badge bg-${lobby.status === 'active' ? 'success' : 'secondary'}">${lobby.status}</span></td>
+                        <td>
+                            <a href="/admin/lobby/${lobby.lobby_code}/manage" class="btn btn-sm btn-outline-primary" title="Manage lobby">
+                                <i class="fas fa-cog"></i>
+                            </a>
+                            <button class="btn btn-sm btn-outline-danger btn-close-lobby" data-lobby-id="${lobby.id}" data-lobby-name="${lobby.name}" title="Close lobby">
+                                <i class="fas fa-times-circle"></i>
+                            </button>
+                        </td>
+                    </tr>`;
+                });
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+
+                // Attach close lobby handlers
+                document.querySelectorAll('.btn-close-lobby').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const lobbyId = this.dataset.lobbyId;
+                        const lobbyName = this.dataset.lobbyName;
+                        if (confirm(`Close lobby "${lobbyName}"?`)) {
+                            fetch(`/admin/lobby/${lobbyId}/close`, { method: 'POST' })
+                                .then(response => response.json())
+                                .then(data => {
+                                    showToast(data.message || 'Lobby closed', 'success');
+                                    loadLobbies();
+                                });
+                        }
+                    });
+                });
+            } else {
+                container.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-users-slash fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No lobbies created yet</h5>
+                        <p class="text-muted">Create your first lobby using the button above.</p>
+                    </div>
+                `;
+            }
+        });
+}
+
+// Create lobby form submission
+document.getElementById('createLobbyForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    fetch('/admin/lobby/create', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showToast('Error: ' + data.error, 'error');
+        } else {
+            showToast('Lobby created successfully!', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('createLobbyModal')).hide();
+            this.reset();
+            loadLobbies();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred. Please try again.', 'error');
     });
 });
 </script>

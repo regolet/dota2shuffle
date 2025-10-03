@@ -250,6 +250,11 @@ code[style*="cursor: pointer"]:hover {
     border-left: 4px solid #dc3545;
 }
 
+.player-current {
+    background-color: #d1ecf1 !important;
+    border-left: 4px solid #0dcaf0;
+}
+
 .icon-button {
     background: none;
     border: none;

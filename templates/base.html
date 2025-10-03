@@ -16,9 +16,14 @@
                 <i class="fas fa-dice"></i> Dota 2 Shuffle
             </a>
             <div class="navbar-nav ms-auto">
+                <span id="player-navbar-status" class="navbar-text text-light me-3" style="display: none;">
+                    Welcome, <strong id="player-navbar-name"></strong>
+                </span>
+                {% if 'admin_id' not in session %}
                 <a class="nav-link" href="{{ url_for('admin_login') }}">
                     <i class="fas fa-cog"></i> Admin
                 </a>
+                {% endif %}
             </div>
         </div>
     </nav>
