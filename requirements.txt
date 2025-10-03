@@ -1,3 +1,11 @@
 Flask==2.3.3
+Flask-SocketIO==5.3.6
 Flask-SQLAlchemy==3.0.5
+gunicorn==23.0.0
+eventlet==0.33.3
+python-engineio==4.12.2
+python-socketio==5.9.0
+bidict==0.23.1
+simple-websocket==1.1.0
+SQLAlchemy==2.0.36
 Werkzeug==2.3.7

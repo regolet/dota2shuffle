@@ -46,7 +46,11 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Node (if accidentally added)
 node_modules/
 package-lock.json
+
+# Environment variables
+.env
