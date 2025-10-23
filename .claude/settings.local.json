@@ -1,7 +1,26 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(del:*)",
+      "Bash(taskkill:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx create-next-app@latest:*)",
+      "Read(//c/Users/admin/git repo/dota2shuffle-nextjs/**)",
+      "Bash(npm install:*)",
+      "Bash(npm run db:push:*)",
+      "Bash(npm run dev)",
+      "Bash(node:*)",
+      "Bash(sqlite3:*)",
+      "Bash(powershell:*)",
+      "Bash(npm run build)",
+      "Bash(npm run:*)",
+      "Bash(cp:*)"
     ],
     "deny": [],
     "ask": []
