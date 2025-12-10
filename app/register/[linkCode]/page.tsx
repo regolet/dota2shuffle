@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react'
 import { DOTA_ROLES } from '@/lib/validators'
+import { RegistrationLink } from '@/types'
 
 export default function RegisterPage({ params }: { params: Promise<{ linkCode: string }> }) {
   const { linkCode } = use(params)
@@ -11,7 +12,7 @@ export default function RegisterPage({ params }: { params: Promise<{ linkCode: s
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
-  const [linkInfo, setLinkInfo] = useState<any>(null)
+  const [linkInfo, setLinkInfo] = useState<Partial<RegistrationLink> | null>(null)
   const [linkValid, setLinkValid] = useState(true)
 
   useEffect(() => {
@@ -207,11 +208,10 @@ export default function RegisterPage({ params }: { params: Promise<{ linkCode: s
                     key={role}
                     type="button"
                     onClick={() => toggleRole(role)}
-                    className={`px-4 py-3 rounded border-2 transition-all ${
-                      preferredRoles.includes(role)
-                        ? 'bg-dota-radiant border-dota-radiant text-white'
-                        : 'bg-gray-800 border-gray-600 hover:border-gray-500'
-                    }`}
+                    className={`px-4 py-3 rounded border-2 transition-all ${preferredRoles.includes(role)
+                      ? 'bg-dota-radiant border-dota-radiant text-white'
+                      : 'bg-gray-800 border-gray-600 hover:border-gray-500'
+                      }`}
                     disabled={loading}
                   >
                     {role}

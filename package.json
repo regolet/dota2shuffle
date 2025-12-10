@@ -1,6 +1,6 @@
 {
-  "name": "dota2shuffle-nextjs",
-  "version": "1.0.0",
+  "name": "dota2shuffle",
+  "version": "3.0.1",
   "private": true,
   "scripts": {
     "dev": "next dev",

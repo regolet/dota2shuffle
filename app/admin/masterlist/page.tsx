@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
+import { BUTTON_STYLES } from '@/lib/button-styles'
 
 interface MasterlistPlayer {
   id: string
@@ -96,11 +98,12 @@ export default function MasterlistPage() {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-4xl font-bold">Players Masterlist</h1>
-          <div className="space-x-4">
+          <div className="flex gap-3">
             <Link
               href="/admin/dashboard"
-              className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded transition-colors"
+              className={BUTTON_STYLES.secondary + ' inline-flex items-center gap-2'}
             >
+              <ArrowLeft className="w-4 h-4" />
               Back to Dashboard
             </Link>
           </div>
@@ -165,9 +168,8 @@ export default function MasterlistPage() {
                   {filteredPlayers.map((player) => (
                     <tr
                       key={player.id}
-                      className={`border-b border-gray-800 hover:bg-gray-800 transition-colors ${
-                        player.isBanned ? 'opacity-60' : ''
-                      }`}
+                      className={`border-b border-gray-800 hover:bg-gray-800 transition-colors ${player.isBanned ? 'opacity-60' : ''
+                        }`}
                     >
                       <td className="py-3 px-4">
                         <div>
@@ -197,11 +199,10 @@ export default function MasterlistPage() {
                       </td>
                       <td className="py-3 px-4">
                         <span
-                          className={`px-3 py-1 rounded text-sm ${
-                            player.isBanned
+                          className={`px-3 py-1 rounded text-sm ${player.isBanned
                               ? 'bg-red-500 bg-opacity-20 text-red-300'
                               : 'bg-green-500 bg-opacity-20 text-green-300'
-                          }`}
+                            }`}
                         >
                           {player.isBanned ? 'Banned' : 'Active'}
                         </span>
@@ -212,11 +213,10 @@ export default function MasterlistPage() {
                       <td className="py-3 px-4">
                         <button
                           onClick={() => toggleBan(player.id, player.isBanned, player.playerName)}
-                          className={`px-3 py-1 rounded text-xs transition-colors ${
-                            player.isBanned
+                          className={`px-3 py-1 rounded text-xs transition-colors ${player.isBanned
                               ? 'bg-green-600 hover:bg-green-500'
                               : 'bg-red-600 hover:bg-red-500'
-                          }`}
+                            }`}
                         >
                           {player.isBanned ? 'Unban' : 'Ban'}
                         </button>

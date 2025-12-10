@@ -26,9 +26,6 @@ A modern, offline-capable web application for creating balanced Dota 2 teams thr
 ## 🚀 Quick Start (5 minutes)
 
 ```bash
-# Navigate to the app directory
-cd dota2shuffle-nextjs
-
 # Install dependencies
 npm install
 
