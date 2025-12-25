@@ -1,6 +1,6 @@
 'use client'
 
-import { BUTTON_STYLES } from '@/lib/button-styles'
+import { BUTTON_STYLES } from '@/lib/styles/button'
 
 interface EventFormData {
     title: string

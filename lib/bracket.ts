@@ -141,6 +141,9 @@ function getRoundName(roundNumber: number, totalRounds: number): string {
 /**
  * Set match winner and update bracket progression
  */
+/**
+ * Set match winner and update bracket progression
+ */
 export function setMatchWinner(
   rounds: BracketRound[],
   matchId: string,
@@ -167,26 +170,77 @@ export function setMatchWinner(
 
   // Progress winner to next match
   if (currentMatch.nextMatchId) {
-    for (const round of updatedRounds) {
-      const nextMatch = round.matches.find((m) => m.id === currentMatch!.nextMatchId)
-      if (nextMatch) {
-        // Place winner in next match
-        if (!nextMatch.team1Id) {
-          nextMatch.team1Id = winnerId
-        } else if (!nextMatch.team2Id) {
-          nextMatch.team2Id = winnerId
-        }
+    const nextMatch = findMatchInRounds(updatedRounds, currentMatch.nextMatchId)
+    if (nextMatch) {
+      // Determine target slot based on match number (Odd = Slot 1, Even = Slot 2)
+      // matchNumber is 1-based.
+      // Match 1 (Index 0) -> Slot 1
+      // Match 2 (Index 1) -> Slot 2
+      const isSlot1 = currentMatch.matchNumber % 2 !== 0
 
-        // If both teams are set, mark match as ready
-        if (nextMatch.team1Id && nextMatch.team2Id) {
-          nextMatch.status = 'pending'
-        }
-        break
+      if (isSlot1) {
+        nextMatch.team1Id = winnerId
+      } else {
+        nextMatch.team2Id = winnerId
+      }
+
+      // If both teams are set, mark match as ready
+      if (nextMatch.team1Id && nextMatch.team2Id) {
+        nextMatch.status = 'pending'
       }
     }
   }
 
   return updatedRounds
+}
+
+/**
+ * Reset a match (remove winner) and cascade changes
+ */
+export function resetMatch(rounds: BracketRound[], matchId: string): BracketRound[] {
+  const updatedRounds = JSON.parse(JSON.stringify(rounds)) as BracketRound[]
+  resetMatchRecursive(updatedRounds, matchId)
+  return updatedRounds
+}
+
+function resetMatchRecursive(rounds: BracketRound[], matchId: string) {
+  const match = findMatchInRounds(rounds, matchId)
+  if (!match) return
+
+  // 1. Reset current match
+  match.winnerId = null
+  match.status = (match.team1Id && match.team2Id) ? 'pending' : 'pending'
+
+  // 2. Cascade to next match
+  if (match.nextMatchId) {
+    const nextMatch = findMatchInRounds(rounds, match.nextMatchId)
+    if (nextMatch) {
+      // Determine which slot to clear
+      const isSlot1 = match.matchNumber % 2 !== 0
+
+      if (isSlot1) {
+        nextMatch.team1Id = null
+      } else {
+        nextMatch.team2Id = null
+      }
+
+      // If next match was already completed (had a winner), we must reset it too
+      if (nextMatch.winnerId) {
+        resetMatchRecursive(rounds, nextMatch.id)
+      } else {
+        // Just ensure it's pending (or holding if empty? status logic is simple here)
+        nextMatch.status = 'pending'
+      }
+    }
+  }
+}
+
+function findMatchInRounds(rounds: BracketRound[], matchId: string): BracketMatch | null {
+  for (const round of rounds) {
+    const match = round.matches.find((m) => m.id === matchId)
+    if (match) return match
+  }
+  return null
 }
 
 /**
@@ -266,38 +320,4 @@ export function calculateStandings(rounds: BracketRound[], teams: BracketTeam[])
   return standings
 }
 
-/**
- * Reset a match (remove winner)
- */
-export function resetMatch(rounds: BracketRound[], matchId: string): BracketRound[] {
-  const updatedRounds = JSON.parse(JSON.stringify(rounds)) as BracketRound[]
 
-  for (const round of updatedRounds) {
-    const match = round.matches.find((m) => m.id === matchId)
-    if (match) {
-      match.winnerId = null
-      match.status = match.team1Id && match.team2Id ? 'pending' : 'pending'
-
-      // Remove winner from next match
-      if (match.nextMatchId) {
-        for (const nextRound of updatedRounds) {
-          const nextMatch = nextRound.matches.find((m) => m.id === match.nextMatchId)
-          if (nextMatch) {
-            // Remove the team from next match
-            const winnerWasTeam1 = nextMatch.team1Id === match.winnerId
-            if (winnerWasTeam1) {
-              nextMatch.team1Id = null
-            } else {
-              nextMatch.team2Id = null
-            }
-            nextMatch.status = 'pending'
-            break
-          }
-        }
-      }
-      break
-    }
-  }
-
-  return updatedRounds
-}

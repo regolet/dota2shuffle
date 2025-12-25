@@ -53,9 +53,9 @@ export async function GET(
     // Get teams that are actually in the bracket
     const bracketTeams = teamIds.size > 0
       ? await db
-          .select()
-          .from(teams)
-          .where(inArray(teams.id, Array.from(teamIds)))
+        .select()
+        .from(teams)
+        .where(inArray(teams.id, Array.from(teamIds)))
       : []
 
     return NextResponse.json({
@@ -166,13 +166,20 @@ export async function POST(
     }
 
     // Generate bracket
-    const bracketTeams = eventTeams.map((t) => ({
+    let bracketTeams = eventTeams.map((t) => ({
       id: t.id,
       teamNumber: t.teamNumber,
       teamName: t.teamName,
       averageMmr: t.averageMmr,
       playerIds: t.playerIds as string[],
     }))
+
+    if (body.randomizeSeeds) {
+      for (let i = bracketTeams.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bracketTeams[i], bracketTeams[j]] = [bracketTeams[j], bracketTeams[i]];
+      }
+    }
 
     const rounds = generateSingleEliminationBracket(bracketTeams)
 

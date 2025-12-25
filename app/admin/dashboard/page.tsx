@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Edit2, Copy, Eye, Users, Shuffle, Trophy, Trash2, Settings, Home, LogOut, Plus } from 'lucide-react'
-import { useNotification } from '@/lib/useNotification'
-import { BUTTON_STYLES, COMPACT_COLORS, buttonClass } from '@/lib/button-styles'
+import { Edit2, Copy, Eye, Users, Shuffle, Trophy, Trash2, Settings, Home, LogOut, Plus, Calendar, Clock } from 'lucide-react'
+import { useNotification } from '@/hooks/useNotification'
+import { BUTTON_STYLES, buttonClass } from '@/lib/styles/button'
+import { MobileNav } from '@/components/MobileNav'
 
 interface RegistrationLink {
   id: string
@@ -85,7 +86,6 @@ export default function AdminDashboard() {
     setMaxPlayers(link.maxPlayers)
     setExpiresHours('')
 
-    // Populate scheduled date and time if available
     if (link.scheduledTime) {
       const scheduled = new Date(link.scheduledTime)
       const dateStr = scheduled.toISOString().split('T')[0]
@@ -112,7 +112,6 @@ export default function AdminDashboard() {
     setCreating(true)
 
     try {
-      // Prepare request body
       const bodyData: any = {
         title,
         description: description || undefined,
@@ -120,7 +119,6 @@ export default function AdminDashboard() {
         expiresHours: expiresHours || undefined,
       }
 
-      // Only add scheduledTime if both date and time are provided
       if (scheduledDate && scheduledTime) {
         bodyData.scheduledTime = new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
       }
@@ -144,7 +142,6 @@ export default function AdminDashboard() {
         throw new Error(data.error)
       }
 
-      // Refresh links and close modal
       await fetchLinks()
       closeModal()
 
@@ -211,15 +208,28 @@ export default function AdminDashboard() {
     router.push('/admin/login')
   }
 
+  // Mobile navigation items
+  const navItems = [
+    { href: '/admin/dashboard', label: 'Dashboard', icon: <Home className="w-5 h-5" /> },
+    { href: '/admin/masterlist', label: 'Players Masterlist', icon: <Users className="w-5 h-5" /> },
+    { href: '/admin/settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
+    { href: '/', label: 'Home', icon: <Home className="w-5 h-5" /> },
+  ]
+
   return (
     <>
       <notification.NotificationContainer />
-      <div className="min-h-screen bg-gradient-to-br from-dota-bg to-gray-900 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-dota-bg to-gray-900 p-4 lg:p-6 safe-top safe-bottom">
         <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="flex justify-between items-center mb-8">
-            <h1 className="text-4xl font-bold">Admin Dashboard</h1>
-            <div className="flex gap-3">
+          {/* Header - Responsive */}
+          <div className="flex justify-between items-center mb-6 lg:mb-8">
+            <div className="flex items-center gap-3">
+              <MobileNav items={navItems} onLogout={handleLogout} />
+              <h1 className="text-2xl lg:text-4xl font-bold">Admin Dashboard</h1>
+            </div>
+
+            {/* Desktop Navigation */}
+            <div className="desktop-only gap-3">
               <button
                 onClick={openCreateModal}
                 className={BUTTON_STYLES.primary + ' inline-flex items-center gap-2'}
@@ -256,27 +266,35 @@ export default function AdminDashboard() {
                 Logout
               </button>
             </div>
+
+            {/* Mobile Create Button */}
+            <button
+              onClick={openCreateModal}
+              className="mobile-only bg-dota-radiant hover:bg-dota-radiant/80 text-white px-4 py-2 rounded-lg font-semibold transition-colors touch-target"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
           </div>
 
           {/* Modal for Create/Edit */}
           {showModal && (
             <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
               <div className="bg-gray-900 rounded-lg border border-gray-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="sticky top-0 bg-gray-900 border-b border-gray-700 p-6">
+                <div className="sticky top-0 bg-gray-900 border-b border-gray-700 p-4 lg:p-6">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-2xl font-bold">
-                      {modalMode === 'create' ? 'Create Registration Link' : 'Edit Registration Link'}
+                    <h2 className="text-xl lg:text-2xl font-bold">
+                      {modalMode === 'create' ? 'Create Event' : 'Edit Event'}
                     </h2>
                     <button
                       onClick={closeModal}
-                      className="text-gray-400 hover:text-white text-2xl"
+                      className="text-gray-400 hover:text-white text-2xl p-2 touch-target"
                     >
                       ×
                     </button>
                   </div>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                <form onSubmit={handleSubmit} className="p-4 lg:p-6 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-2">
@@ -286,10 +304,10 @@ export default function AdminDashboard() {
                         type="text"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
-                        className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-dota-radiant"
+                        className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-dota-radiant touch-target"
                         required
                         disabled={creating}
-                        placeholder="e.g., Weekly Dota 2 Tournament"
+                        placeholder="e.g., Weekly Tournament"
                       />
                     </div>
 
@@ -301,7 +319,7 @@ export default function AdminDashboard() {
                         type="number"
                         value={maxPlayers}
                         onChange={(e) => setMaxPlayers(Number(e.target.value))}
-                        className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-dota-radiant"
+                        className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-dota-radiant touch-target"
                         min="10"
                         max="1000"
                         disabled={creating}
@@ -316,65 +334,56 @@ export default function AdminDashboard() {
                     <textarea
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-dota-radiant"
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-dota-radiant"
                       rows={3}
                       disabled={creating}
                       placeholder="Event details, rules, etc."
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Expires In (hours, optional)
-                      </label>
-                      <input
-                        type="number"
-                        value={expiresHours}
-                        onChange={(e) =>
-                          setExpiresHours(e.target.value ? Number(e.target.value) : '')
-                        }
-                        className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-dota-radiant"
-                        min="1"
-                        max="168"
-                        disabled={creating}
-                        placeholder="Never expires"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Expires In (hours)
+                    </label>
+                    <input
+                      type="number"
+                      value={expiresHours}
+                      onChange={(e) =>
+                        setExpiresHours(e.target.value ? Number(e.target.value) : '')
+                      }
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-dota-radiant touch-target"
+                      min="1"
+                      max="168"
+                      disabled={creating}
+                      placeholder="Never expires"
+                    />
                   </div>
 
                   <div className="border-t border-gray-700 pt-4">
-                    <h3 className="text-lg font-semibold mb-3">Schedule Event (Optional)</h3>
+                    <h3 className="text-lg font-semibold mb-3">Schedule (Optional)</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2">
-                          Event Date
-                        </label>
+                        <label className="block text-sm font-medium mb-2">Date</label>
                         <input
                           type="date"
                           value={scheduledDate}
                           onChange={(e) => setScheduledDate(e.target.value)}
-                          className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-dota-radiant"
+                          className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-dota-radiant touch-target"
                           disabled={creating}
                         />
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium mb-2">
-                          Event Time
-                        </label>
+                        <label className="block text-sm font-medium mb-2">Time</label>
                         <input
                           type="time"
                           value={scheduledTime}
                           onChange={(e) => setScheduledTime(e.target.value)}
-                          className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-dota-radiant"
+                          className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-dota-radiant touch-target"
                           disabled={creating}
                         />
                       </div>
                     </div>
-                    <p className="text-xs text-gray-400 mt-2">
-                      Set a scheduled time to display when the event will take place
-                    </p>
                   </div>
 
                   <div className="flex gap-4 justify-end pt-4">
@@ -382,16 +391,16 @@ export default function AdminDashboard() {
                       type="button"
                       onClick={closeModal}
                       disabled={creating}
-                      className={BUTTON_STYLES.secondary}
+                      className={BUTTON_STYLES.secondary + ' touch-target'}
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={creating}
-                      className={BUTTON_STYLES.primary}
+                      className={BUTTON_STYLES.primary + ' touch-target'}
                     >
-                      {creating ? 'Saving...' : modalMode === 'create' ? 'Create Event' : 'Update Event'}
+                      {creating ? 'Saving...' : modalMode === 'create' ? 'Create' : 'Update'}
                     </button>
                   </div>
                 </form>
@@ -399,136 +408,207 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* Registration Links Table */}
-          <div className="bg-dota-card p-6 rounded-lg border border-gray-700">
-            <h2 className="text-2xl font-semibold mb-4">Registration Links</h2>
+          {/* Registration Links */}
+          <div className="bg-dota-card p-4 lg:p-6 rounded-lg border border-gray-700">
+            <h2 className="text-xl lg:text-2xl font-semibold mb-4">Events</h2>
 
             {loading ? (
               <p className="text-gray-400">Loading...</p>
             ) : links.length === 0 ? (
-              <p className="text-gray-400">No registration links created yet.</p>
+              <p className="text-gray-400">No events yet. Create one to get started!</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 px-4">Title</th>
-                      <th className="text-left py-3 px-4">Max Players</th>
-                      <th className="text-left py-3 px-4">Scheduled</th>
-                      <th className="text-left py-3 px-4">Expires</th>
-                      <th className="text-left py-3 px-4">Status</th>
-                      <th className="text-left py-3 px-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {links.map((link) => (
-                      <tr
-                        key={link.id}
-                        className="border-b border-gray-800 hover:bg-gray-800 transition-colors"
-                      >
-                        <td className="py-3 px-4">
-                          <div>
+              <>
+                {/* Desktop Table */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-700">
+                        <th className="text-left py-3 px-4">Title</th>
+                        <th className="text-left py-3 px-4">Max</th>
+                        <th className="text-left py-3 px-4">Scheduled</th>
+                        <th className="text-left py-3 px-4">Expires</th>
+                        <th className="text-left py-3 px-4">Status</th>
+                        <th className="text-left py-3 px-4">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {links.map((link) => (
+                        <tr
+                          key={link.id}
+                          className="border-b border-gray-800 hover:bg-gray-800 transition-colors"
+                        >
+                          <td className="py-3 px-4">
                             <p className="font-semibold">{link.title}</p>
                             {link.description && (
-                              <p className="text-xs text-gray-400 mt-1">
+                              <p className="text-xs text-gray-400 mt-1 truncate max-w-xs">
                                 {link.description}
                               </p>
                             )}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">{link.maxPlayers}</td>
-                        <td className="py-3 px-4 text-sm">
-                          {link.scheduledTime ? (
-                            <div>
-                              <div className="font-semibold text-yellow-400">
-                                {new Date(link.scheduledTime).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-4">{link.maxPlayers}</td>
+                          <td className="py-3 px-4 text-sm">
+                            {link.scheduledTime ? (
+                              <div>
+                                <div className="font-semibold text-yellow-400">
+                                  {new Date(link.scheduledTime).toLocaleDateString()}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  {new Date(link.scheduledTime).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </div>
                               </div>
-                              <div className="text-xs text-gray-400">
-                                {new Date(link.scheduledTime).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </div>
+                            ) : (
+                              <span className="text-gray-500">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-sm">
+                            {link.expiresAt
+                              ? new Date(link.expiresAt).toLocaleDateString()
+                              : 'Never'}
+                          </td>
+                          <td className="py-3 px-4">
+                            <button
+                              onClick={() => toggleLinkStatus(link.id, link.isActive)}
+                              className={`px-3 py-1 rounded text-sm cursor-pointer transition-colors ${link.isActive
+                                ? 'bg-green-500 bg-opacity-20 text-green-300 hover:bg-opacity-30'
+                                : 'bg-red-500 bg-opacity-20 text-red-300 hover:bg-opacity-30'
+                                }`}
+                            >
+                              {link.isActive ? 'Active' : 'Inactive'}
+                            </button>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex gap-1 flex-wrap">
+                              <button
+                                onClick={() => openEditModal(link)}
+                                className="bg-blue-600 hover:bg-blue-500 p-1.5 rounded transition-colors"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => copyToClipboard(link.linkCode)}
+                                className="bg-gray-600 hover:bg-gray-500 p-1.5 rounded transition-colors"
+                                title="Copy URL"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                              <Link
+                                href={`/register/${link.linkCode}`}
+                                target="_blank"
+                                className="bg-cyan-600 hover:bg-cyan-500 p-1.5 rounded transition-colors"
+                                title="View"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Link>
+                              <Link
+                                href={`/admin/players/${link.linkCode}`}
+                                className="bg-purple-600 hover:bg-purple-500 p-1.5 rounded transition-colors"
+                                title="Players"
+                              >
+                                <Users className="w-4 h-4" />
+                              </Link>
+                              <Link
+                                href={`/shuffle/${link.linkCode}`}
+                                className="bg-green-600 hover:bg-green-500 p-1.5 rounded transition-colors"
+                                title="Shuffle"
+                              >
+                                <Shuffle className="w-4 h-4" />
+                              </Link>
+                              <Link
+                                href={`/admin/bracket/${link.linkCode}`}
+                                className="bg-yellow-600 hover:bg-yellow-500 p-1.5 rounded transition-colors"
+                                title="Bracket"
+                              >
+                                <Trophy className="w-4 h-4" />
+                              </Link>
+                              <button
+                                onClick={() => deleteLink(link.id, link.title)}
+                                className="bg-red-600 hover:bg-red-500 p-1.5 rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
-                          ) : (
-                            <span className="text-gray-500">Not scheduled</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="lg:hidden space-y-4">
+                  {links.map((link) => (
+                    <div key={link.id} className="mobile-card">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-lg truncate">{link.title}</h3>
+                          {link.description && (
+                            <p className="text-sm text-gray-400 truncate">{link.description}</p>
                           )}
-                        </td>
-                        <td className="py-3 px-4 text-sm">
-                          {link.expiresAt
-                            ? new Date(link.expiresAt).toLocaleDateString()
-                            : 'Never'}
-                        </td>
-                        <td className="py-3 px-4">
-                          <button
-                            onClick={() => toggleLinkStatus(link.id, link.isActive)}
-                            className={`px-3 py-1 rounded text-sm cursor-pointer transition-colors ${link.isActive
-                              ? 'bg-green-500 bg-opacity-20 text-green-300 hover:bg-opacity-30'
-                              : 'bg-red-500 bg-opacity-20 text-red-300 hover:bg-opacity-30'
-                              }`}
-                          >
-                            {link.isActive ? 'Active' : 'Inactive'}
-                          </button>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex gap-1 flex-wrap">
-                            <button
-                              onClick={() => openEditModal(link)}
-                              className="bg-blue-600 hover:bg-blue-500 p-1.5 rounded inline-flex items-center transition-colors"
-                              title="Edit event"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => copyToClipboard(link.linkCode)}
-                              className="bg-gray-600 hover:bg-gray-500 p-1.5 rounded inline-flex items-center transition-colors"
-                              title="Copy registration URL"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                            <Link
-                              href={`/register/${link.linkCode}`}
-                              target="_blank"
-                              className="bg-cyan-600 hover:bg-cyan-500 p-1.5 rounded inline-flex items-center transition-colors"
-                              title="View registration page"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Link>
-                            <Link
-                              href={`/admin/players/${link.linkCode}`}
-                              className="bg-purple-600 hover:bg-purple-500 p-1.5 rounded inline-flex items-center transition-colors"
-                              title="Manage players"
-                            >
-                              <Users className="w-4 h-4" />
-                            </Link>
-                            <Link
-                              href={`/shuffle/${link.linkCode}`}
-                              className="bg-green-600 hover:bg-green-500 p-1.5 rounded inline-flex items-center transition-colors"
-                              title="Shuffle teams"
-                            >
-                              <Shuffle className="w-4 h-4" />
-                            </Link>
-                            <Link
-                              href={`/admin/bracket/${link.linkCode}`}
-                              className="bg-yellow-600 hover:bg-yellow-500 p-1.5 rounded inline-flex items-center transition-colors"
-                              title="Tournament bracket"
-                            >
-                              <Trophy className="w-4 h-4" />
-                            </Link>
-                            <button
-                              onClick={() => deleteLink(link.id, link.title)}
-                              className="bg-red-600 hover:bg-red-500 p-1.5 rounded inline-flex items-center transition-colors"
-                              title="Delete event"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+                        <button
+                          onClick={() => toggleLinkStatus(link.id, link.isActive)}
+                          className={`ml-3 px-2 py-1 rounded text-xs ${link.isActive
+                            ? 'bg-green-500/20 text-green-300'
+                            : 'bg-red-500/20 text-red-300'
+                            }`}
+                        >
+                          {link.isActive ? 'Active' : 'Inactive'}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-sm text-gray-400 mb-4">
+                        <span className="flex items-center gap-1">
+                          <Users className="w-4 h-4" />
+                          {link.maxPlayers}
+                        </span>
+                        {link.scheduledTime && (
+                          <span className="flex items-center gap-1 text-yellow-400">
+                            <Calendar className="w-4 h-4" />
+                            {new Date(link.scheduledTime).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Mobile Action Buttons */}
+                      <div className="grid grid-cols-4 gap-2">
+                        <button
+                          onClick={() => openEditModal(link)}
+                          className="flex flex-col items-center gap-1 p-2 bg-blue-600/20 rounded-lg text-blue-300 touch-target"
+                        >
+                          <Edit2 className="w-5 h-5" />
+                          <span className="text-xs">Edit</span>
+                        </button>
+                        <Link
+                          href={`/admin/players/${link.linkCode}`}
+                          className="flex flex-col items-center gap-1 p-2 bg-purple-600/20 rounded-lg text-purple-300 touch-target"
+                        >
+                          <Users className="w-5 h-5" />
+                          <span className="text-xs">Players</span>
+                        </Link>
+                        <Link
+                          href={`/shuffle/${link.linkCode}`}
+                          className="flex flex-col items-center gap-1 p-2 bg-green-600/20 rounded-lg text-green-300 touch-target"
+                        >
+                          <Shuffle className="w-5 h-5" />
+                          <span className="text-xs">Shuffle</span>
+                        </Link>
+                        <button
+                          onClick={() => copyToClipboard(link.linkCode)}
+                          className="flex flex-col items-center gap-1 p-2 bg-gray-600/20 rounded-lg text-gray-300 touch-target"
+                        >
+                          <Copy className="w-5 h-5" />
+                          <span className="text-xs">Copy</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>

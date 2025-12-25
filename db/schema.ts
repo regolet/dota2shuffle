@@ -6,6 +6,9 @@ export const admins = sqliteTable('admins', {
   id: text('id').primaryKey().$defaultFn(() => createId()),
   username: text('username').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
+  mustChangePassword: integer('must_change_password', { mode: 'boolean' }).notNull().default(false),
+  failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
+  lockedUntil: integer('locked_until', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 })
 
@@ -107,6 +110,7 @@ export const shuffleHistory = sqliteTable('shuffle_history', {
   teamCount: integer('team_count').notNull(),
   balanceScore: integer('balance_score').notNull(), // variance * 1000 for storage
   reservePlayerIds: text('reserve_player_ids', { mode: 'json' }).$type<string[]>(), // IDs of reserve players
+  captainIds: text('captain_ids', { mode: 'json' }).$type<string[]>(), // IDs of team captains
   shuffledAt: integer('shuffled_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   shuffledBy: text('shuffled_by').references(() => admins.id),
 })
@@ -125,3 +129,15 @@ export const bracketHistory = sqliteTable('bracket_history', {
   savedBy: text('saved_by').references(() => admins.id),
   description: text('description'), // Optional description of this save
 })
+
+// Audit Logs table - for security event tracking
+export const auditLogs = sqliteTable('audit_logs', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  eventType: text('event_type').notNull(), // login_success, login_failure, password_change, admin_action
+  adminId: text('admin_id').references(() => admins.id),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  details: text('details', { mode: 'json' }).$type<Record<string, any>>(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+})
+

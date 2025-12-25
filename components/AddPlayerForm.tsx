@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { DOTA_ROLES } from '@/lib/validators'
-import { BUTTON_STYLES } from '@/lib/button-styles'
+import { BUTTON_STYLES } from '@/lib/styles/button'
 
 interface AddPlayerFormProps {
     onSubmit: (player: { playerName: string; mmr: number; preferredRoles: string[] }) => Promise<void>

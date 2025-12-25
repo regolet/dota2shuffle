@@ -9,7 +9,7 @@ export async function POST(
   try {
     const { linkCode } = await params
     const body = await request.json()
-    const { teams: shuffledTeams, balance, totalPlayers, reservePlayers } = body
+    const { teams: shuffledTeams, balance, totalPlayers, reservePlayers, captainIds } = body
 
     if (!shuffledTeams || !Array.isArray(shuffledTeams) || shuffledTeams.length === 0) {
       return NextResponse.json(
@@ -42,6 +42,7 @@ export async function POST(
         teamCount: shuffledTeams.length,
         balanceScore: Math.round((balance?.variance || 0) * 1000),
         reservePlayerIds: reservePlayerIds,
+        captainIds: captainIds || [],
       })
       .returning()
 

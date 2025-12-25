@@ -16,6 +16,9 @@ db.exec(`
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
+    must_change_password INTEGER NOT NULL DEFAULT 0,
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until INTEGER,
     created_at INTEGER
   );
 
@@ -149,6 +152,18 @@ db.exec(`
     FOREIGN KEY (bracket_id) REFERENCES brackets(id),
     FOREIGN KEY (registration_link_id) REFERENCES registration_links(id),
     FOREIGN KEY (saved_by) REFERENCES admins(id)
+  );
+
+  -- Audit Logs table for security event tracking
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    admin_id TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    details TEXT,
+    created_at INTEGER,
+    FOREIGN KEY (admin_id) REFERENCES admins(id)
   );
 `);
 

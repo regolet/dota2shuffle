@@ -42,13 +42,15 @@ function isRateLimited(ip: string): boolean {
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl
 
-    // Only rate limit the login endpoint
-    if (pathname === '/api/admin/login' && request.method === 'POST') {
+    // Rate limit sensitive authentication endpoints
+    const rateLimitedPaths = ['/api/admin/login', '/api/admin/change-password']
+
+    if (rateLimitedPaths.includes(pathname) && request.method === 'POST') {
         const ip = getClientIP(request)
 
         if (isRateLimited(ip)) {
             return NextResponse.json(
-                { error: 'Too many login attempts. Please try again in 1 minute.' },
+                { error: 'Too many attempts. Please try again in 1 minute.' },
                 { status: 429 }
             )
         }

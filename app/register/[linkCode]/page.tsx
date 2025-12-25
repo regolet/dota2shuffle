@@ -144,7 +144,7 @@ export default function RegisterPage({ params }: { params: Promise<{ linkCode: s
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-dota-bg to-gray-900 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-dota-bg to-gray-900 p-4 safe-top safe-bottom">
       <div className="max-w-2xl w-full">
         <div className="bg-dota-card p-8 rounded-lg border border-gray-700 shadow-2xl">
           <h1 className="text-3xl font-bold mb-2">Player Registration</h1>
@@ -176,7 +176,7 @@ export default function RegisterPage({ params }: { params: Promise<{ linkCode: s
                 type="text"
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-dota-radiant"
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-dota-radiant touch-target"
                 required
                 disabled={loading}
                 placeholder="Enter your in-game name"
@@ -189,7 +189,7 @@ export default function RegisterPage({ params }: { params: Promise<{ linkCode: s
                 type="number"
                 value={mmr}
                 onChange={(e) => setMmr(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-dota-radiant"
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg focus:outline-none focus:border-dota-radiant touch-target"
                 required
                 disabled={loading}
                 min="0"
@@ -223,7 +223,7 @@ export default function RegisterPage({ params }: { params: Promise<{ linkCode: s
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-dota-radiant hover:bg-opacity-80 text-white font-semibold py-3 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-dota-radiant hover:bg-opacity-80 text-white font-semibold py-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed touch-target text-lg"
             >
               {loading ? 'Registering...' : 'Register'}
             </button>

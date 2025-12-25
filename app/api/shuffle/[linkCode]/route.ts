@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, players, registrationLinks, teams, shuffleHistory } from '@/db'
 import { eq } from 'drizzle-orm'
-import { performShuffle } from '@/lib/shuffle'
+import { performShuffle, performCaptainsShuffle } from '@/lib/shuffle'
 
 export async function GET(
   request: NextRequest,
@@ -119,6 +119,104 @@ export async function GET(
     })
   } catch (error) {
     console.error('Shuffle error:', error)
+
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST endpoint for Captains Draft shuffle
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ linkCode: string }> }
+) {
+  try {
+    const { linkCode } = await params
+    const body = await request.json()
+    const { captainIds } = body as { captainIds: string[] }
+
+    if (!captainIds || !Array.isArray(captainIds) || captainIds.length < 2) {
+      return NextResponse.json(
+        { error: 'At least 2 captains are required' },
+        { status: 400 }
+      )
+    }
+
+    // Get registration link
+    const [regLink] = await db
+      .select()
+      .from(registrationLinks)
+      .where(eq(registrationLinks.linkCode, linkCode))
+      .limit(1)
+
+    if (!regLink) {
+      return NextResponse.json(
+        { error: 'Invalid registration link' },
+        { status: 404 }
+      )
+    }
+
+    // Get all registered players
+    const registeredPlayers = await db
+      .select()
+      .from(players)
+      .where(eq(players.registrationLinkId, regLink.id))
+
+    // Perform captains shuffle
+    const result = performCaptainsShuffle(
+      registeredPlayers.map((p) => ({
+        id: p.id,
+        playerName: p.playerName,
+        mmr: p.mmr,
+        preferredRoles: p.preferredRoles,
+        status: p.status,
+      })),
+      captainIds,
+      {
+        teamSize: 5,
+        iterations: 1000,
+      }
+    )
+
+    console.log('\n=== CAPTAINS DRAFT RESULTS ===')
+    console.log(`- Captains: ${captainIds.length}`)
+    console.log(`- Teams: ${result.teams.length}`)
+    console.log(`- Reserve players: ${result.reservePlayers.length}`)
+    console.log(`- Balance variance: ${result.balance.variance}`)
+
+    result.teams.forEach((team, idx) => {
+      const captain = team.players.find(p => captainIds.includes(p.id))
+      console.log(`\nTeam ${idx + 1} (Captain: ${captain?.playerName || 'N/A'}):`)
+      team.players.forEach(p => {
+        const isCaptain = captainIds.includes(p.id)
+        console.log(`  ${isCaptain ? '👑' : '-'} ${p.playerName} (${p.mmr})`)
+      })
+    })
+
+    return NextResponse.json({
+      success: true,
+      teams: result.teams,
+      balance: result.balance,
+      reservePlayers: result.reservePlayers,
+      captainIds: result.captainIds,
+      totalPlayers: registeredPlayers.filter(p => p.status === 'Present').length,
+      saved: false,
+      timestamp: new Date().toISOString(),
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
+  } catch (error) {
+    console.error('Captains shuffle error:', error)
 
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 400 })

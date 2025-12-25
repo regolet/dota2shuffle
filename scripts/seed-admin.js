@@ -12,33 +12,40 @@ console.log('Seeding default admin user...');
 const username = 'admin';
 const password = 'admin123';
 
+// Consistent bcrypt cost factor (12 for security)
+const BCRYPT_COST = 12;
+
 try {
   // Check if admin already exists
   const existingAdmin = db.prepare('SELECT * FROM admins WHERE username = ?').get(username);
 
   if (existingAdmin) {
-    console.log('⚠ Admin user already exists. Updating password...');
+    console.log('⚠ Admin user already exists. Updating password and setting forced password change...');
 
-    // Hash the password
-    const passwordHash = bcrypt.hashSync(password, 10);
+    // Hash the password with consistent cost factor
+    const passwordHash = bcrypt.hashSync(password, BCRYPT_COST);
 
-    // Update existing admin
-    db.prepare('UPDATE admins SET password_hash = ? WHERE username = ?').run(passwordHash, username);
+    // Update existing admin with mustChangePassword flag
+    db.prepare(`
+      UPDATE admins 
+      SET password_hash = ?, must_change_password = 1 
+      WHERE username = ?
+    `).run(passwordHash, username);
 
     console.log('✓ Admin password updated successfully!');
   } else {
     console.log('Creating new admin user...');
 
-    // Hash the password
-    const passwordHash = bcrypt.hashSync(password, 10);
+    // Hash the password with consistent cost factor
+    const passwordHash = bcrypt.hashSync(password, BCRYPT_COST);
 
-    // Create new admin
+    // Create new admin with mustChangePassword = true
     const id = createId();
     const createdAt = Date.now();
 
     db.prepare(`
-      INSERT INTO admins (id, username, password_hash, created_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO admins (id, username, password_hash, must_change_password, failed_login_attempts, created_at)
+      VALUES (?, ?, ?, 1, 0, ?)
     `).run(id, username, passwordHash, createdAt);
 
     console.log('✓ Default admin user created successfully!');
@@ -49,7 +56,7 @@ try {
   console.log('  Username: admin');
   console.log('  Password: admin123');
   console.log('');
-  console.log('⚠ IMPORTANT: Change the default password after first login!');
+  console.log('⚠ IMPORTANT: You will be FORCED to change this password on first login!');
 
 } catch (error) {
   console.error('Error seeding admin:', error);

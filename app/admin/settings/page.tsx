@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, AlertTriangle } from 'lucide-react'
-import { useNotification } from '@/lib/useNotification'
-import { BUTTON_STYLES } from '@/lib/button-styles'
+import { useNotification } from '@/hooks/useNotification'
+import { BUTTON_STYLES } from '@/lib/styles/button'
 
 export default function SettingsPage() {
     const router = useRouter()

@@ -46,7 +46,7 @@ function shuffleArray<T>(array: T[]): T[] {
   const arr = [...array]
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
-    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr
 }
@@ -298,5 +298,101 @@ export function performShuffle(
     teams,
     reservePlayers,
     balance,
+  }
+}
+
+/**
+ * Captains Draft: Place designated captains on separate teams, then distribute remaining players
+ */
+export function performCaptainsShuffle(
+  players: Player[],
+  captainIds: string[],
+  config: Partial<ShuffleConfig> = {}
+): ShuffleResult & { captainIds: string[] } {
+  const { teamSize, iterations } = { ...DEFAULT_CONFIG, ...config }
+
+  // Filter present players
+  const presentPlayers = players.filter((p) => p.status === 'Present')
+
+  // Validate captains exist and are present
+  const captains = presentPlayers.filter((p) => captainIds.includes(p.id))
+  if (captains.length !== captainIds.length) {
+    throw new Error('Some captains are not present or do not exist')
+  }
+
+  // Number of teams = number of captains
+  const numTeams = captains.length
+
+  if (numTeams < 2) {
+    throw new Error('At least 2 captains are required')
+  }
+
+  // Get non-captain players
+  const nonCaptains = presentPlayers.filter((p) => !captainIds.includes(p.id))
+
+  // Check if we have enough players per team
+  const playersPerTeam = Math.floor(nonCaptains.length / numTeams)
+  if (playersPerTeam < 1) {
+    throw new Error('Not enough non-captain players to form teams')
+  }
+
+  let bestTeams: Player[][] = []
+  let bestVariance = Infinity
+  let bestRoleScore = Infinity
+
+  console.log(`Captains Draft: ${captains.length} captains, ${nonCaptains.length} other players, ${numTeams} teams`)
+
+  // Iterative balancing for non-captain distribution
+  for (let iter = 0; iter < iterations; iter++) {
+    // Initialize teams with captains (shuffled order for variety)
+    const shuffledCaptains = shuffleArray([...captains])
+    const teams: Player[][] = shuffledCaptains.map((captain) => [captain])
+
+    // Shuffle non-captains
+    const shuffledNonCaptains = shuffleArray([...nonCaptains])
+
+    // Take only enough for complete teams (teamSize - 1 per team since captain is already in)
+    const playersNeeded = numTeams * (teamSize - 1)
+    const playersForTeams = shuffledNonCaptains.slice(0, playersNeeded)
+
+    // Distribute non-captains using round-robin
+    for (let i = 0; i < playersForTeams.length; i++) {
+      const teamIndex = i % numTeams
+      teams[teamIndex].push(playersForTeams[i])
+    }
+
+    // Calculate variance and role score
+    const teamStats = calculateTeamStats(teams)
+    const variance = calculateVariance(teamStats)
+    const roleScore = calculateRoleScore(teams)
+
+    const combinedScore = roleScore * 100 + variance
+    const bestCombinedScore = bestRoleScore * 100 + bestVariance
+
+    if (combinedScore < bestCombinedScore) {
+      bestVariance = variance
+      bestRoleScore = roleScore
+      bestTeams = teams
+    }
+  }
+
+  console.log(`Captains Draft Final - roleScore: ${bestRoleScore}, variance: ${bestVariance}`)
+
+  const teams = calculateTeamStats(bestTeams)
+
+  // Get reserve players (those not in any team)
+  const playersInTeams = new Set<string>()
+  teams.forEach((team) => {
+    team.players.forEach((player) => playersInTeams.add(player.id))
+  })
+  const reservePlayers = presentPlayers.filter((p) => !playersInTeams.has(p.id))
+
+  const balance = calculateBalance(teams)
+
+  return {
+    teams,
+    reservePlayers,
+    balance,
+    captainIds,
   }
 }

@@ -7,17 +7,57 @@
   --foreground: #ffffff;
   --card-bg: #2f3136;
   --border: #40444b;
+  /* Safe area for notched devices */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+  /* Prevent horizontal scroll on mobile */
+  overflow-x: hidden;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+  
+  /* Safe area utilities */
+  .safe-top {
+    padding-top: var(--safe-area-top);
+  }
+  .safe-bottom {
+    padding-bottom: var(--safe-area-bottom);
+  }
+  .safe-x {
+    padding-left: var(--safe-area-left);
+    padding-right: var(--safe-area-right);
+  }
+  
+  /* Touch-friendly minimum size */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Mobile card layout */
+  .mobile-card {
+    @apply bg-gray-800 rounded-lg p-4 border border-gray-700;
+  }
+  
+  /* Hide on mobile, show on desktop */
+  .desktop-only {
+    @apply hidden lg:flex;
+  }
+  
+  /* Show on mobile, hide on desktop */
+  .mobile-only {
+    @apply flex lg:hidden;
   }
 }
 
@@ -37,4 +77,33 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+/* Mobile navigation animation */
+.nav-drawer {
+  transform: translateX(-100%);
+  transition: transform 0.3s ease-in-out;
+}
+
+.nav-drawer.open {
+  transform: translateX(0);
+}
+
+/* Backdrop fade */
+.backdrop {
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  pointer-events: none;
+}
+
+.backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Smooth transitions for responsive elements */
+@media (prefers-reduced-motion: no-preference) {
+  .transition-layout {
+    transition: all 0.2s ease-in-out;
+  }
 }

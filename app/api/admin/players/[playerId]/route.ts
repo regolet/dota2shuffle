@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, players } from '@/db'
 import { eq } from 'drizzle-orm'
 import { requireAuth } from '@/lib/auth'
+import { z } from 'zod'
+
+// Validation schema for player updates
+const updatePlayerSchema = z.object({
+  playerName: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(100, 'Name must be less than 100 characters')
+    .trim(),
+  mmr: z
+    .number()
+    .int('MMR must be a whole number')
+    .min(0, 'MMR cannot be negative')
+    .max(15000, 'MMR seems too high'),
+  preferredRoles: z
+    .array(z.enum(['Carry', 'Mid', 'Offlane', 'Soft Support', 'Hard Support']))
+    .min(1, 'Select at least one preferred role')
+    .max(2, 'Maximum 2 roles'),
+})
 
 // PATCH - Update player
 export async function PATCH(
@@ -13,12 +32,15 @@ export async function PATCH(
     const { playerId } = await params
     const body = await request.json()
 
+    // Validate input
+    const validated = updatePlayerSchema.parse(body)
+
     await db
       .update(players)
       .set({
-        playerName: body.playerName,
-        mmr: body.mmr,
-        preferredRoles: body.preferredRoles,
+        playerName: validated.playerName,
+        mmr: validated.mmr,
+        preferredRoles: validated.preferredRoles,
       })
       .where(eq(players.id, playerId))
 
@@ -28,6 +50,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Validation error', details: error.errors },
+        { status: 400 }
+      )
+    }
+
     console.error('Update player error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -35,6 +64,7 @@ export async function PATCH(
     )
   }
 }
+
 
 // DELETE - Delete player
 export async function DELETE(
