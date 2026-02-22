@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, registrationLinks, teams, shuffleHistory } from '@/db'
 import { eq } from 'drizzle-orm'
+import { requireAuth } from '@/lib/auth'
+import { getAuthorizedLink } from '@/lib/db-helpers'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ linkCode: string }> }
 ) {
   try {
+    const session = await requireAuth()
     const { linkCode } = await params
     const body = await request.json()
     const { teams: shuffledTeams, balance, totalPlayers, reservePlayers, captainIds } = body
@@ -18,16 +21,12 @@ export async function POST(
       )
     }
 
-    // Get registration link
-    const [regLink] = await db
-      .select()
-      .from(registrationLinks)
-      .where(eq(registrationLinks.linkCode, linkCode))
-      .limit(1)
+    // Get registration link with authorization
+    const regLink = await getAuthorizedLink(linkCode, session.adminId)
 
     if (!regLink) {
       return NextResponse.json(
-        { error: 'Invalid registration link' },
+        { error: 'Not found or unauthorized' },
         { status: 404 }
       )
     }

@@ -149,13 +149,15 @@ export function setMatchWinner(
   matchId: string,
   winnerId: string
 ): BracketRound[] {
-  const updatedRounds = JSON.parse(JSON.stringify(rounds)) as BracketRound[]
+  const updatedRounds = (typeof structuredClone === 'function'
+    ? structuredClone(rounds)
+    : JSON.parse(JSON.stringify(rounds))) as BracketRound[];
 
   // Find the match and update it
   let currentMatch: BracketMatch | null = null
 
   for (const round of updatedRounds) {
-    const match = round.matches.find((m) => m.id === matchId)
+    const match = round.matches.find((m: BracketMatch) => m.id === matchId)
     if (match) {
       match.winnerId = winnerId
       match.status = 'completed'
@@ -198,7 +200,9 @@ export function setMatchWinner(
  * Reset a match (remove winner) and cascade changes
  */
 export function resetMatch(rounds: BracketRound[], matchId: string): BracketRound[] {
-  const updatedRounds = JSON.parse(JSON.stringify(rounds)) as BracketRound[]
+  const updatedRounds = (typeof structuredClone === 'function'
+    ? structuredClone(rounds)
+    : JSON.parse(JSON.stringify(rounds))) as BracketRound[];
   resetMatchRecursive(updatedRounds, matchId)
   return updatedRounds
 }

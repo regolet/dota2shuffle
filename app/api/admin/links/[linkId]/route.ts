@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, registrationLinks } from '@/db'
 import { eq } from 'drizzle-orm'
 import { requireAuth } from '@/lib/auth'
+import { getAuthorizedLink } from '@/lib/db-helpers'
 
 // PATCH - Update link (status or full edit)
 export async function PATCH(
@@ -9,9 +10,15 @@ export async function PATCH(
   { params }: { params: Promise<{ linkId: string }> }
 ) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
     const { linkId } = await params
     const body = await request.json()
+
+    // Check ownership
+    const link = await getAuthorizedLink(linkId, session.adminId, true)
+    if (!link) {
+      return NextResponse.json({ error: 'Not found or unauthorized' }, { status: 404 })
+    }
 
     // Build update object based on what fields are provided
     const updateData: any = {}
@@ -65,8 +72,14 @@ export async function DELETE(
   { params }: { params: Promise<{ linkId: string }> }
 ) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
     const { linkId } = await params
+
+    // Check ownership
+    const link = await getAuthorizedLink(linkId, session.adminId, true)
+    if (!link) {
+      return NextResponse.json({ error: 'Not found or unauthorized' }, { status: 404 })
+    }
 
     await db.delete(registrationLinks).where(eq(registrationLinks.id, linkId))
 

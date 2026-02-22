@@ -62,44 +62,6 @@ export async function GET(
       }
     )
 
-    // Log player roles for debugging
-    console.log('\n=== PLAYER ROLES ===')
-    presentPlayers.forEach(p => {
-      console.log(`${p.playerName} (${p.mmr}): ${p.preferredRoles.join(', ')}`)
-    })
-
-    // Log shuffle results for debugging
-    console.log('\n=== SHUFFLE RESULTS ===')
-    console.log(`- Total players: ${presentPlayers.length}`)
-    console.log(`- Teams: ${result.teams.length}`)
-    console.log(`- Reserve players: ${result.reservePlayers.length}`)
-    console.log(`- Balance variance: ${result.balance.variance}`)
-    console.log(`- MMR difference: ${result.balance.mmrDifference}`)
-
-    // Log team compositions to verify role distribution
-    result.teams.forEach((team, idx) => {
-      console.log(`\nTeam ${idx + 1}:`)
-      team.players.forEach(p => {
-        console.log(`  - ${p.playerName} (${p.mmr}): ${p.preferredRoles.join(', ')}`)
-      })
-
-      const roleCounts: Record<string, number> = {
-        'Hard Support': 0,
-        'Soft Support': 0,
-        'Carry': 0,
-        'Mid': 0,
-        'Offlane': 0,
-      }
-      team.players.forEach(player => {
-        player.preferredRoles.forEach(role => {
-          if (roleCounts[role] !== undefined) {
-            roleCounts[role]++
-          }
-        })
-      })
-      console.log(`  Role counts:`, roleCounts)
-    })
-
     // Return shuffle result WITHOUT saving to database
     // Admin will manually save if they're satisfied with the shuffle
     return NextResponse.json({
@@ -183,21 +145,6 @@ export async function POST(
         iterations: 1000,
       }
     )
-
-    console.log('\n=== CAPTAINS DRAFT RESULTS ===')
-    console.log(`- Captains: ${captainIds.length}`)
-    console.log(`- Teams: ${result.teams.length}`)
-    console.log(`- Reserve players: ${result.reservePlayers.length}`)
-    console.log(`- Balance variance: ${result.balance.variance}`)
-
-    result.teams.forEach((team, idx) => {
-      const captain = team.players.find(p => captainIds.includes(p.id))
-      console.log(`\nTeam ${idx + 1} (Captain: ${captain?.playerName || 'N/A'}):`)
-      team.players.forEach(p => {
-        const isCaptain = captainIds.includes(p.id)
-        console.log(`  ${isCaptain ? '👑' : '-'} ${p.playerName} (${p.mmr})`)
-      })
-    })
 
     return NextResponse.json({
       success: true,

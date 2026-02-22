@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, registrationLinks } from '@/db'
+import { eq } from 'drizzle-orm'
 import { createLinkSchema } from '@/lib/validators'
 import { requireAuth } from '@/lib/auth'
 import { ZodError } from 'zod'
@@ -82,10 +83,14 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Require authentication
-    await requireAuth()
+    const session = await requireAuth()
 
-    // Get all registration links
-    const links = await db.select().from(registrationLinks).orderBy(registrationLinks.createdAt)
+    // Get all registration links for the logged-in admin
+    const links = await db
+      .select()
+      .from(registrationLinks)
+      .where(eq(registrationLinks.createdBy, session.adminId))
+      .orderBy(registrationLinks.createdAt)
 
     return NextResponse.json({
       success: true,

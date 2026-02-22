@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, players } from '@/db'
 import { eq } from 'drizzle-orm'
 import { requireAuth } from '@/lib/auth'
+import { getAuthorizedPlayer } from '@/lib/db-helpers'
 import { z } from 'zod'
 
 // Validation schema for player updates
@@ -28,9 +29,15 @@ export async function PATCH(
   { params }: { params: Promise<{ playerId: string }> }
 ) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
     const { playerId } = await params
     const body = await request.json()
+
+    // Validate ownership
+    const player = await getAuthorizedPlayer(playerId, session.adminId)
+    if (!player) {
+      return NextResponse.json({ error: 'Not found or unauthorized' }, { status: 404 })
+    }
 
     // Validate input
     const validated = updatePlayerSchema.parse(body)
@@ -72,8 +79,14 @@ export async function DELETE(
   { params }: { params: Promise<{ playerId: string }> }
 ) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
     const { playerId } = await params
+
+    // Validate ownership
+    const player = await getAuthorizedPlayer(playerId, session.adminId)
+    if (!player) {
+      return NextResponse.json({ error: 'Not found or unauthorized' }, { status: 404 })
+    }
 
     await db.delete(players).where(eq(players.id, playerId))
 

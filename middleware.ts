@@ -18,6 +18,16 @@ function getClientIP(request: NextRequest): string {
 
 function isRateLimited(ip: string): boolean {
     const now = Date.now()
+
+    // Lazy cleanup to prevent memory leak
+    if (rateLimitStore.size > 1000) {
+        for (const [key, val] of rateLimitStore.entries()) {
+            if (now > val.resetTime) {
+                rateLimitStore.delete(key)
+            }
+        }
+    }
+
     const record = rateLimitStore.get(ip)
 
     if (!record) {

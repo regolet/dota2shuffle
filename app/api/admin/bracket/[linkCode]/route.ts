@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, brackets, teams, registrationLinks, shuffleHistory, bracketHistory } from '@/db'
 import { eq, desc, inArray } from 'drizzle-orm'
 import { requireAuth } from '@/lib/auth'
+import { getAuthorizedLink } from '@/lib/db-helpers'
 import { generateSingleEliminationBracket } from '@/lib/bracket'
 
 // GET - Fetch bracket for event
@@ -10,19 +11,15 @@ export async function GET(
   { params }: { params: Promise<{ linkCode: string }> }
 ) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
     const { linkCode } = await params
 
-    // Get registration link
-    const [regLink] = await db
-      .select()
-      .from(registrationLinks)
-      .where(eq(registrationLinks.linkCode, linkCode))
-      .limit(1)
+    // Get registration link with authorization
+    const regLink = await getAuthorizedLink(linkCode, session.adminId)
 
     if (!regLink) {
       return NextResponse.json(
-        { error: 'Invalid registration link' },
+        { error: 'Not found or unauthorized' },
         { status: 404 }
       )
     }
@@ -84,20 +81,16 @@ export async function POST(
   { params }: { params: Promise<{ linkCode: string }> }
 ) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
     const { linkCode } = await params
     const body = await request.json()
 
-    // Get registration link
-    const [regLink] = await db
-      .select()
-      .from(registrationLinks)
-      .where(eq(registrationLinks.linkCode, linkCode))
-      .limit(1)
+    // Get registration link with authorization
+    const regLink = await getAuthorizedLink(linkCode, session.adminId)
 
     if (!regLink) {
       return NextResponse.json(
-        { error: 'Invalid registration link' },
+        { error: 'Not found or unauthorized' },
         { status: 404 }
       )
     }
@@ -237,19 +230,15 @@ export async function DELETE(
   { params }: { params: Promise<{ linkCode: string }> }
 ) {
   try {
-    await requireAuth()
+    const session = await requireAuth()
     const { linkCode } = await params
 
-    // Get registration link
-    const [regLink] = await db
-      .select()
-      .from(registrationLinks)
-      .where(eq(registrationLinks.linkCode, linkCode))
-      .limit(1)
+    // Get registration link with authorization
+    const regLink = await getAuthorizedLink(linkCode, session.adminId)
 
     if (!regLink) {
       return NextResponse.json(
-        { error: 'Invalid registration link' },
+        { error: 'Not found or unauthorized' },
         { status: 404 }
       )
     }
